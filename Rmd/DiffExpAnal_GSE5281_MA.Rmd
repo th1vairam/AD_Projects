@@ -9,7 +9,7 @@ output: html_document
 ## It is assumed your working directory is where this file
 
 # source('/mnt/Github/knit2synapse-1/R/knitFile2Synapse.R')
-# knitFile2Synapse(file = "./DiffExpAnal_MSSM_MA.Rmd", owner = 'syn4164913', name = "Differential Expression Analysis MSSM MA",overwrite=F)
+# knitFile2Synapse(file = "./DiffExpAnal_GSE5281_MA.Rmd", owner = 'syn4167496', name = "Differential Expression Analysis GSE5281 MA",overwrite=F)
 
 ## Load required libraries
 library(synapseClient)
@@ -107,10 +107,11 @@ unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x)
 ```{r download.data, cache=TRUE}
 # Load series and platform data from GEO
 GSET <- getGEO("GSE5281", GSEMatrix =TRUE)
+ALL_USED_IDs <- 'ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE5nnn/GSE5281/matrix/'
 
 # Log2 transformation (if needed)
 EXPR <- exprs(GSET[[1]])
-qx <- as.numeric(quantile(ex, c(0., 0.25, 0.5, 0.75, 0.99, 1.0), na.rm=T))
+qx <- as.numeric(quantile(EXPR, c(0., 0.25, 0.5, 0.75, 0.99, 1.0), na.rm=T))
 LogC <- (qx[5] > 100) || (qx[6]-qx[1] > 50 && qx[2] > 0) || (qx[2] > 0 && qx[2] < 1 && qx[4] > 1 && qx[4] < 2)
 if (LogC) { 
   EXPR[which(EXPR <= 0)] <- NaN
@@ -216,7 +217,7 @@ featureData <- fData(GSET[[1]])
 FC <- cbind(featureData[rownames(DEXP$logFC),"Gene Symbol"],DEXP$logFC)
 colnames(FC)[1] <- "GeneSymbol"
 
-PVAL <- cbind(featureData[rownames(DEXP$adj.P.Val),"Gene Symbol"],DEXP$logFC)
+PVAL <- cbind(featureData[rownames(DEXP$adj.P.Val),"Gene Symbol"],DEXP$adj.P.Val)
 colnames(PVAL)[1] <- "GeneSymbol"
 ```
 
