@@ -9,7 +9,7 @@ output: html_document
 ## It is assumed your working directory is where this file
 
 # source('/mnt/Github/knit2synapse-1/R/knitFile2Synapse.R')
-knitFile2Synapse(file = "./DiffExpAnal_MSSM_MA.Rmd", owner = 'syn4059381', name = "Differential Expression Analysis MSSM MA",overwrite=F)
+# knitFile2Synapse(file = "./DiffExpAnal_MSSM_MA.Rmd", owner = 'syn4164913', name = "Differential Expression Analysis MSSM MA",overwrite=F)
 
 ## Load required libraries
 library('synapseClient')
@@ -50,8 +50,8 @@ activityDescription = 'Differential expression analysis based on image features'
 thisFileName <- 'DiffExpAnal_MSSM_MA.Rmd'
 
 # Github link
-thisRepo <- getRepo(repository = "th1vairam/", ref="branch", refName='diff_exp')
-thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('code/Rmd/', thisFileName))
+thisRepo <- getRepo(repository = "th1vairam/Takeda_contract", ref="branch", refName='master')
+thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('Rmd/',thisFileName))
 ```
 
 ### Image Analysis
@@ -160,7 +160,7 @@ differential.expression <- function(EXPR_ID, COV_ID){
   if (length(postAdjustedSigCovars$significantCovars) != 0)
     print(paste('Following coefficients have to be included in the model:',paste(postAdjustedSigCovars$significantCovars,collapse=',')))
 
-  # Make contrast to check differential expression between different differentiation stages
+  # Make contrast to check differential expression
   CONT.NAMES <- expand.grid(colnames(DESIGN$design)[1:2],colnames(DESIGN$design)[3:7])
   CONT.NAMES <- apply(CONT.NAMES,1,paste,collapse ='-')
   
@@ -376,10 +376,8 @@ PVAL <- join(PVAL, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
 ### Store files in synapse
  
 ```{r synapse.store, include=FALSE, eval=TRUE}
-activityName='Differential Expression Analysis of MSSM Microarray data'
-  
 # Code
-CODE <- File(paste0('./',thisFileName), name = thisFileName, parentId = parentId)
+CODE <- File(paste0('./',thisFileName), name = "Differential Expression Analysis MSSM MA", parentId = parentId)
 CODE <- synStore(CODE, used = ALL_USED_IDs, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
       
 # Fold change
@@ -396,5 +394,5 @@ PVAL_OBJ <- synStore(PVAL_OBJ, used = ALL_USED_IDs, activityName = activityName,
 ```
 |  *Results*           |  *SynapseID*                |
 |  -------             |   ---------                 |
-|  Log fold change     |  `r FC$properties$id`       |
-|  Adjusted pvalues    |  `r PVAL$properties$id`     |
+|  Log fold change     |  `r FC_OBJ$properties$id`       |
+|  Adjusted pvalues    |  `r PVAL_OBJ$properties$id`     |
