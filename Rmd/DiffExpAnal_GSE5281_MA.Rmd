@@ -22,6 +22,13 @@ library(limma)
 library(knitr)
 library(Biobase)
 library(GEOquery)
+library(RColorBrewer)
+library(gplots)
+library(WGCNA)
+library(psych)
+
+## Requires ggdendro
+devtools::source_url("https://raw.githubusercontent.com/chr1swallace/random-functions/master/R/ggplot-heatmap.R")
 
 ## Needs the dev branch
 library(rGithubClient)
@@ -117,7 +124,12 @@ if (LogC) {
   EXPR[which(EXPR <= 0)] <- NaN
   EXPR <- log2(EXPR)
 }
+tmp <- fData(GSET[[1]])[,"Gene Symbol"]
+EXPR <- EXPR[tmp!='',]
+GNames <- droplevels(tmp[tmp!=''])
 
+Collapsed.obj <- collapseRows(EXPR,GNames,rownames(EXPR))
+EXPR <- Collapsed.obj$datETcollapsed
 ```
 
 ```{r covariates, cache=TRUE, fig.width=15, fig.height=10}
@@ -148,6 +160,12 @@ PHENO.DATA <- as.data.frame(PHENO.DATA)
 PHENO.DATA <- dplyr::mutate(PHENO.DATA, Region.Disease = paste(Brain_Region,Disease_State,sep='.'))
 PHENO.DATA$Region.Disease <- factor(PHENO.DATA$Region.Disease)
 rownames(PHENO.DATA) <- colnames(EXPR)
+```
+
+Correlation between covariates
+```{r pheno.correlation, fig.width=7,fig.height=7}
+COVARIATES.CORRELATION = getAssociationStatistics(PHENO.DATA, PVAL = 1)
+ggheatmap.show(COVARIATES.CORRELATION$plot, col.width=0.3, row.width=0.15)
 ```
 
 ```{r model.fit, cache=TRUE, fig.height=10, fig.width=15}
@@ -213,12 +231,8 @@ colnames(tmp) <- 'Diff exp probes at FDR <= 0.05 and abs. logFC >= 2'
 kable(tmp)
 
 # Get fold change and pvalues
-featureData <- fData(GSET[[1]])
-FC <- cbind(featureData[rownames(DEXP$logFC),"Gene Symbol"],DEXP$logFC)
-colnames(FC)[1] <- "GeneSymbol"
-
-PVAL <- cbind(featureData[rownames(DEXP$adj.P.Val),"Gene Symbol"],DEXP$adj.P.Val)
-colnames(PVAL)[1] <- "GeneSymbol"
+FC <- rownameToFirstColumn(DEXP$logFC,"GeneSymbol")
+PVAL <- rownameToFirstColumn(DEXP$adj.P.Val,"GeneSymbol")
 ```
 
 ### Store files in synapse

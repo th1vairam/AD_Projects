@@ -5,11 +5,11 @@ date: "`r date()`"
 output: html_document
 ---
   
-```{r libs, echo=FALSE, warning=FALSE, message=FALSE}
+```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
 ## It is assumed your working directory is where this file
 
 # source('/mnt/Github/knit2synapse-1/R/knitFile2Synapse.R')
-# knitFile2Synapse(file = "./DiffExpAnal_GSE29378_MA.Rmd", owner = '', name = "Differential Expression Analysis GSE29378 MA",overwrite=F)
+# knitFile2Synapse(file = "./DiffExpAnal_GSE29378_MA.Rmd", owner = 'syn4185900', name = "Differential Expression Analysis GSE29378 MA",overwrite=F)
 
 ## Load required libraries
 library(synapseClient)
@@ -25,6 +25,7 @@ library(GEOquery)
 library(RColorBrewer)
 library(gplots)
 library(WGCNA)
+library(psych)
 
 ## Requires ggdendro
 devtools::source_url("https://raw.githubusercontent.com/chr1swallace/random-functions/master/R/ggplot-heatmap.R")
