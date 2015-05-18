@@ -12,14 +12,23 @@ output: html_document
 # knitFile2Synapse(file = "./DiffExpAnal_MSSM_MA.Rmd", owner = 'syn4164913', name = "Differential Expression Analysis MSSM MA",overwrite=F)
 
 ## Load required libraries
-library('synapseClient')
-library('ggplot2')
-library('reshape2')
-library('data.table')
-library('dplyr')
-library('stringr')
-library('limma')
-library('knitr')
+library(synapseClient)
+library(ggplot2)
+library(reshape2)
+library(data.table)
+library(dplyr)
+library(stringr)
+library(limma)
+library(knitr)
+library(Biobase)
+library(GEOquery)
+library(RColorBrewer)
+library(gplots)
+library(WGCNA)
+library(psych)
+
+## Requires ggdendro
+devtools::source_url("https://raw.githubusercontent.com/chr1swallace/random-functions/master/R/ggplot-heatmap.R")
 
 ## Needs the dev branch
 library(rGithubClient)
@@ -107,12 +116,17 @@ unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x)
 ```{r differential.expression}
 # Function to calculate differnetial expression
 differential.expression <- function(EXPR_ID, COV_ID){
+
   # Download expression data
   EXPR_OBJ <- synGet(EXP_ID)
   EXPR <- read.table(EXPR_OBJ@filePath,header=T,sep='\t',check.names = F)
+  EXPR <- EXPR[EXPR$Gene.Symbol!='',]
   rownames(EXPR) <- EXPR$ID
   ANNOTATIONS <- dplyr::select(EXPR,ID,GB_ACC,Gene.Symbol,ENTREZ_GENE_ID)
   EXPR <- dplyr::select(EXPR,-c(ID,GB_ACC,Gene.Symbol,ENTREZ_GENE_ID))
+
+  Collapsed.obj <- collapseRows(EXPR,ANNOTATIONS$Gene.Symbol,rownames(EXPR))
+  EXPR <- Collapsed.obj$datETcollapsed
 
   # Download covariates data
   COV_OBJ <- synGet(COV_ID)
@@ -208,13 +222,13 @@ colnames(tmp) <- 'Diff exp probes at FDR less than 0.05'
 kable(tmp)
 
 # Get fold change and pvalues
-tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('middle.temporal',colnames(tmp),sep='.')
-FC <- cbind(DIFF.EXP$ANNOTATIONS,tmp)
+FC <- DIFF.EXP$DEXP$logFC
+colnames(FC) <- paste('middle.temporal',colnames(FC),sep='.')
+FC <- rownameToFirstColumn(FC,'GeneSymbol')
 
-tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('middle.temporal',colnames(tmp),sep='.')
-PVAL <- cbind(DIFF.EXP$ANNOTATIONS,tmp)
+PVAL <- DIFF.EXP$DEXP$adj.P.Val
+colnames(PVAL) <- paste('middle.temporal',colnames(PVAL),sep='.')
+PVAL <- rownameToFirstColumn(PVAL,'GeneSymbol')
 ```
 
 ### Superior Temporal Analysis 
@@ -235,11 +249,11 @@ kable(tmp)
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
 colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-FC <- join(FC, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
 colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-PVAL <- join(PVAL, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 ```
 
 ### Inferior Temporal Analysis 
@@ -259,12 +273,12 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('inferior.temporal',colnames(tmp),sep='.')
-FC <- join(FC, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('inferior.temporal',colnames(tmp),sep='.')
-PVAL <- join(PVAL, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 ```
 
 ### Precuneus Superior Parietal Lobule Analysis
@@ -284,12 +298,12 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('superior.parietal',colnames(tmp),sep='.')
-FC <- join(FC, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('superior.parietal',colnames(tmp),sep='.')
-PVAL <- join(PVAL, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 ```
 
 ### Caudal Anterior Cingulate Analysis
@@ -309,12 +323,12 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('anterior.cingulate',colnames(tmp),sep='.')
-FC <- join(FC, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('anterior.cingulate',colnames(tmp),sep='.')
-PVAL <- join(PVAL, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 ```
 
 
@@ -340,12 +354,12 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('hippocampal',colnames(tmp),sep='.')
-FC <- join(FC, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('hippocampal',colnames(tmp),sep='.')
-PVAL <- join(PVAL, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 ```
 
 ### Frontal Pole Analysis
@@ -365,12 +379,12 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('frontal.pole',colnames(tmp),sep='.')
-FC <- join(FC, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('frontal.pole',colnames(tmp),sep='.')
-PVAL <- join(PVAL, cbind(DIFF.EXP$ANNOTATIONS,tmp), by = 'ID', match = 'all')
+colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
 ```
 
 ### Store files in synapse
