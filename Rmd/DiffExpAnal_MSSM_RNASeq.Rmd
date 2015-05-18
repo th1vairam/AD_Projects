@@ -1,0 +1,310 @@
+---
+title: "Differential expression analysis of MSSM RNASeq data based on ADNI 1.5T 3Yr results from Elias"
+author: "Thanneer Perumal"
+date: "`r date()`"
+output: html_document
+---
+  
+```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+## It is assumed your working directory is where this file
+
+# source('/mnt/Github/knit2synapse-1/R/knitFile2Synapse.R')
+# knitFile2Synapse(file = "./DiffExpAnal_MSSM-RNASeq.Rmd", owner = 'syn4210618', name = "Differential Expression Analysis MSSM RNASeq",overwrite=F)
+
+## Load required libraries
+library(synapseClient)
+library(ggplot2)
+library(reshape2)
+library(data.table)
+library(dplyr)
+library(stringr)
+library(limma)
+library(knitr)
+library(Biobase)
+library(GEOquery)
+library(RColorBrewer)
+library(gplots)
+library(WGCNA)
+library(psych)
+library(edgeR)
+
+## Requires ggdendro
+devtools::source_url("https://raw.githubusercontent.com/chr1swallace/random-functions/master/R/ggplot-heatmap.R")
+
+## Needs the dev branch
+library(rGithubClient)
+
+synapseLogin()
+
+# source utility files from ../R/lib folder
+file.sources = list.files('../R/lib',pattern="*.R")
+file.sources = sapply(file.sources,function(x){return(paste('../R/lib',x,sep='/'))})
+tmp = sapply(file.sources,source,.GlobalEnv)
+
+options(xtable.type="html")
+
+knitr::opts_chunk$set(
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  error = FALSE,
+  tidy = FALSE)
+```
+
+```{r synapse.parameters, include=FALSE}
+# Synapse parameters
+parentId = 'syn3721177';
+activityName = 'Differential expression analysis';
+activityDescription = 'Differential expression analysis based on image features';
+
+thisFileName <- 'DiffExpAnal_MSSM_RNASeq.Rmd'
+
+# Github link
+thisRepo <- getRepo(repository = "th1vairam/Takeda_contract", ref="branch", refName='master')
+thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('Rmd/',thisFileName))
+```
+
+### Image Analysis
+
+1. Image features used:
+  * FreeSurfer.thickness..median  
+  * mean.curvature..median         
+  * Volume
+  * travel.depth..median  
+  * FreeSurfer.convexity..sulc...median
+
+```{r load.data}
+adni.mem.1_5T.3Y <- read.csv('./adni.mem_ranked_1.5T_3Yr_takeda_4_6_15.csv')
+label.name.conversion <- read.csv('./label_names_conversion.csv')
+
+adni.mem.1_5T.3Y <- dplyr::mutate(adni.mem.1_5T.3Y, 
+                                  sig.feature.all = a.ks.pvals <= 0.05 & a.cor.pvals <= 0.05,
+                                  sig.feature.aks = a.ks.pvals <= 0.05,
+                                  feature = sapply(str_split(adni.mem.1_5T.3Y$var.nms,'\\.'),function(x){paste(x[-(length(x))],collapse='.')}),
+                                  region = sapply(str_split(adni.mem.1_5T.3Y$var.nms,'\\.'),function(x){paste(x[(length(x))],collapse='.')}))
+adni.mem.1_5T.3Y <- merge(adni.mem.1_5T.3Y,label.name.conversion, by.x = 'region', by.y = 'Label')
+sig.table.all <- xtabs(sig.feature.all ~ feature + region,data = adni.mem.1_5T.3Y)
+colnames(sig.table.all) <- label.name.conversion[match(label.name.conversion$Label,colnames(sig.table.all)),1]
+
+unique.features <- unique(sapply(str_split(rownames(sig.table.all),'\\.'),function(x){x <- x[x!=""];l <- length(x);ifelse(l>1,paste(x[-(l)],collapse='.'),x)}))
+
+region.ranking <- colSums(sig.table.all[rownames(sig.table.all) %in% c('FreeSurfer.thickness..median','mean.curvature..median','Volume','travel.depth..median','FreeSurfer.convexity..sulc...median'),])
+region.ranking <- sort(region.ranking,decreasing = T)
+region.ranking <- region.ranking[region.ranking!=0]
+
+unique.regions.correlated <- unique(sapply(str_split(names(region.ranking),'-'),function(x){x[[length(x)]]}))
+
+sig.table.aks <- xtabs(sig.feature.aks ~ feature + Label.name, data = adni.mem.1_5T.3Y)
+region.ranking <- colSums(sig.table.aks[rownames(sig.table.aks) %in% c('FreeSurfer.thickness..median','mean.curvature..median','Volume','travel.depth..median','FreeSurfer.convexity..sulc...median'),])
+region.ranking <- sort(region.ranking,decreasing = T)
+region.ranking <- region.ranking[region.ranking!=0]
+unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x){x[[length(x)]]}))
+
+```
+2. Significantly changed regions are: `r unique.regions`
+3. Significantly changed regions that are also correlated with ADNI.MEM are: `r unique.regions.correlated`
+
+4. Data were obtained from AMP-AD portal of MSSM, and following brain regions were analysed for differential expression between case and control:
+    * Frontal Pole, 
+    * Superior Temporal Gyrus, [significantly correlated]
+    * Parahippocampal Gyrus
+Obtain count matrix and metadata from synapse.
+```{r download.data, cache=TRUE}
+# Download expression data
+COUNT_ID <- 'syn3205353'
+ALL_USED_IDs <- COUNT_ID
+COUNT_OBJ <- synGet(COUNT_ID)
+COUNT <- read.table(COUNT_OBJ@filePath,header=T,sep='\t',check.names = F, row.names = 1)
+
+# Get metadata
+METADATA_ID <- 'syn3205337'
+METADATA_OBJ <- synGet(METADATA_ID)
+ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_ID
+METADATA <- read.table(METADATA_OBJ@filePath,sep='\t',header=T, row.names=1)
+```
+
+### CPM Normalisation
+Preprocess counts matrix and metadata. Determine design matrix for normalisation and differential expression analysis. 
+
+Remove genes that have less than 1 cpm counts in at least 50% of samples.
+```{r cpmnormalisation}
+ind <- intersect(rownames(METADATA), colnames(COUNT))
+METADATA <- METADATA[ind,]
+COUNT <- COUNT[, ind]
+PROCESSED_COUNTS = getGeneFilteredGeneExprMatrix(COUNT,MIN_GENE_CPM=1, MIN_SAMPLE_PERCENT_WITH_MIN_GENE_CPM=0.5)
+```
+
+### Covariate clustering
+Determine relationship between covariates. 
+
+```{r covariates.clustering}
+FactorCovariates <- c('TISSUE','Donor','RACE','CDR','CERJ','SEX','NP.1','bbscore')
+ContCovariates <- c('PMI','AOD','PlaqueMean')
+  
+# Find inter relation between factor covariates
+COVARIATES = METADATA[,c(FactorCovariates,ContCovariates),drop=F]
+rownames(COVARIATES) <- rownames(METADATA)
+
+# Convert factor covariates to factors
+COVARIATES[,FactorCovariates] = lapply(COVARIATES[,FactorCovariates], factor)
+COVARIATES[,ContCovariates] = lapply(COVARIATES[,ContCovariates], as.character)
+COVARIATES[,ContCovariates] = lapply(COVARIATES[,ContCovariates], as.numeric)
+
+COVARIATES <- dplyr::mutate(COVARIATES, TISSUE.CDR = paste(TISSUE,CDR,sep='.'))
+COVARIATES$TISSUE.CDR <- factor(COVARIATES$TISSUE.CDR)
+```
+
+Covariate correlation
+
+```{r covariates.correlation, fig.width=10, fig.height=10}
+COVARIATES.CORRELATION = getAssociationStatistics(COVARIATES, PVAL = 1)
+ggheatmap.show(COVARIATES.CORRELATION$plot, col.width=0.3, row.width=0.15)
+```
+
+### Normalisation (with NULL)
+Initial normalisation usign voom (with NULL design)
+
+```{r initial.voom.normalisation}
+# Initial normalisation of gene expression
+VOOM.GENE_EXPRESSION = voom(PROCESSED_COUNTS$filteredExprMatrix, design=NULL, plot=T)
+
+# Initial design matrix with covariates under consideration
+DM = getDesignMatrix(COVARIATES, Intercept = F)
+```
+
+### Significant Covariates
+Correlation between pca of unadjusted mRNA expression and covariates is used to find significant covariates
+```{r preAdjusted.covariates}
+# Find correlation between PC's of gene expression with covariates
+DESIGN = getDesignMat2Fact(DM$design,FactorCovariates)
+preAdjustedSigCovars = runPCAandPlotCorrelations(VOOM.GENE_EXPRESSION$E, DESIGN,'NULL design(voom-normalized)', isKeyPlot=TRUE)
+
+# Find significant covariates
+adjustCovars = designMatVarsToCovars(getCovariatesMap(DM),preAdjustedSigCovars$significantCovars)
+```
+
+Significant covariates to adjust at FDR 0.1 are `r adjustCovars`
+
+```{r preAdjustedSigCovars.NULL, fig.width=15, fig.height=8}
+preAdjustedSigCovars[["PC_res"]][[1]]$plotData
+```
+
+```{r preAdjustedSigCovars.NULL.ALL, fig.width=15, fig.height=8}
+preAdjustedSigCovars[["PC_res"]][[2]]$plotData
+```
+
+### Normalisation (custom/manual design)
+Reperform normalisation with custom design matrix (manually with "TISSUE.CDR","SEX","RACE","PMI" as fixed effects and Donor as random effects)
+
+```{r reperform.normalisation, cache=TRUE}
+# Post adjusted design matrix
+DM1 = getDesignMatrix(COVARIATES[,c("TISSUE.CDR","SEX","RACE","PMI"),drop=F],Intercept = F)
+DM1$design = DM1$design[,linColumnFinder(DM1$design)$indepCols]
+    
+# Estimate correlation of random effects
+VOOM.ADJUSTED.GENE_EXPRESSION = voom(PROCESSED_COUNTS$filteredExprMatrix, design=DM1$design, plot=F)
+correlation <- duplicateCorrelation(VOOM.ADJUSTED.GENE_EXPRESSION$E, design=DM1$design, block=COVARIATES$Donor)
+  
+# Re-calculate voom weights with correlation of random effects
+VOOM.ADJUSTED.GENE_EXPRESSION = voom(PROCESSED_COUNTS$filteredExprMatrix, design=DM1$design, plot=F,
+                                     block=COVARIATES$Donor, correlation = correlation$cor)
+  
+# Re-calculate linear fit using new weights and new design
+VOOM.ADJUSTED.FIT = lmFit(VOOM.ADJUSTED.GENE_EXPRESSION$E, design=DM1$design, weights = VOOM.ADJUSTED.GENE_EXPRESSION$weights,
+                          block=COVARIATES$Donor, correlation = correlation$cor)
+
+# Residuals after normalisation
+RESIDUAL.GENE_EXPRESSION = residuals.MArrayLM(VOOM.ADJUSTED.FIT,VOOM.ADJUSTED.GENE_EXPRESSION$E)
+
+# Find PC of residual gene expression and significant covariates that are highly correlated with PCs
+rownames(DESIGN) <- rownames(METADATA)
+residualSigCovars = runPCAandPlotCorrelations(RESIDUAL.GENE_EXPRESSION,
+                                              dplyr::select(DESIGN,-starts_with('Donor')),
+                                              'all adjusted design(voom-normalized)',
+                                              isKeyPlot=TRUE)
+```
+
+```{r residualSigCovars.manual, fig.width=15, fig.height=8}
+residualSigCovars[["PC_res"]][[1]]$plotData
+```
+
+```{r residualSigCovars.manual.ALL, fig.width=15, fig.height=8}
+residualSigCovars[["PC_res"]][[2]]$plotData
+```
+ 
+### Differential Expression
+ 
+```{r contrast.fit, cache=TRUE, fig.height=10, fig.width=15}
+# Make contrast to check differential expression
+CONT.NAMES <- colnames(DM1$design)[grep('BM_10',colnames(DM1$design))]
+CONT.NAMES <- combn(CONT.NAMES,2)
+CONT.NAMES1 <- apply(CONT.NAMES,2,paste,collapse='-')
+
+CONT.NAMES <- colnames(DM1$design)[grep('BM_22',colnames(DM1$design))]
+CONT.NAMES <- combn(CONT.NAMES,2)
+CONT.NAMES2 <- apply(CONT.NAMES,2,paste,collapse='-')
+
+CONT.NAMES <- colnames(DM1$design)[grep('BM_36',colnames(DM1$design))]
+CONT.NAMES <- combn(CONT.NAMES,2)
+CONT.NAMES3 <- apply(CONT.NAMES,2,paste,collapse='-')
+
+CONT.NAMES <- c(CONT.NAMES1,CONT.NAMES2,CONT.NAMES3)
+CONT <- makeContrasts(contrasts=CONT.NAMES,levels=colnames(VOOM.ADJUSTED.FIT$coefficients))
+colnames(CONT) <- gsub('TISSUE.CDR','',colnames(CONT))
+
+# Refit contrasts
+FIT.CONTRAST <- contrasts.fit(VOOM.ADJUSTED.FIT,CONT)
+  
+# Estimate moderated t-statistics
+FIT.CONTRAST <- eBayes(FIT.CONTRAST)
+  
+# Obtain all the differential expession combinations
+DEXP <- list()
+DEXP$logFC <- data.frame(row.names = rownames(VOOM.ADJUSTED.GENE_EXPRESSION$E))
+DEXP$adj.P.Val <- data.frame(row.names = rownames(VOOM.ADJUSTED.GENE_EXPRESSION$E))
+  
+for (i in colnames(CONT)){
+  tmp <- topTable(FIT.CONTRAST, coef=i, number=dim(VOOM.ADJUSTED.GENE_EXPRESSION$E)[1])    
+  DEXP$logFC[,i] <- tmp[rownames(DEXP$logFC),'logFC']
+  DEXP$adj.P.Val[,i] <- tmp[rownames(DEXP$adj.P.Val),'adj.P.Val']
+}
+  
+# Get number of significantly differentialy expressed genes with adj.P.Val <= 0.05 and abs(logFC) >= 0
+DEXP$SIG.EXP <- DEXP$adj.P.Val<=0.05 & abs(DEXP$logFC) >= 0   
+DEXP$NUM.SIG.EXP <- colSums(DEXP$SIG.EXP)
+```
+
+```{r print.fc.pval}
+# Print results
+tmp <- as.data.frame(DEXP$NUM.SIG.EXP)
+colnames(tmp) <- 'Diff exp probes at FDR <= 0.05'
+kable(tmp)
+
+# Get fold change and pvalues
+FC <- rownameToFirstColumn(DEXP$logFC,"EnsembleID")
+PVAL <- rownameToFirstColumn(DEXP$adj.P.Val,"EnsembleID")
+```
+
+### Store files in synapse
+ 
+```{r synapse.store, include=FALSE, eval=TRUE}
+# Code
+CODE <- File(paste0('./',thisFileName), name = "Differential Expression Analysis MSSM RNASeq", parentId = parentId)
+CODE <- synStore(CODE, used = ALL_USED_IDs, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
+      
+# Fold change
+FC <- FC[, unique(colnames(FC))]
+write.table(FC, file='./FoldChange_MSSM_RNASeq.tsv', sep='\t', row.names=F, quote=F)
+FC_OBJ <- File('./FoldChange_MSSM_RNASeq.tsv',name = 'Differential Expression Analysis MSSM RNASeq logFC',parentId = parentId)
+FC_OBJ <- synStore(FC_OBJ, used = ALL_USED_IDs, activityName = activityName, executed=CODE$properties$id, activityDescription = activityDescription)
+    
+# Pvalue
+PVAL <- PVAL[, unique(colnames(PVAL))]
+write.table(PVAL, file='./AdjustedPval_MSSM_RNASeq.tsv', sep='\t', row.names=F, quote=F)
+PVAL_OBJ <- File('./AdjustedPval_MSSM_RNASeq.tsv',name = 'Differential Expression Analysis MSSM RNASeq adjPval',parentId = parentId)
+PVAL_OBJ <- synStore(PVAL_OBJ, used = ALL_USED_IDs, activityName = activityName, executed=CODE$properties$id, activityDescription = activityDescription)
+```
+|  *Results*           |  *SynapseID*                    |
+|  -------             |   ---------                     |
+|  Log fold change     |  `r FC_OBJ$properties$id`       |
+|  Adjusted pvalues    |  `r PVAL_OBJ$properties$id`     |
