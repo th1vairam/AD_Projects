@@ -2,14 +2,14 @@
 calcCompleteCorAndPlot <- function(COMPARE_data, COVAR_data, correlationType, title, 
                                    WEIGHTS = NULL, PLOT_ALL_COVARS=FALSE, EXCLUDE_VARS_FROM_FDR=NULL, MAX_FDR = 0.1) {
   
-  require(plyr)
+  # require(plyr)
   
   # Get factor and continuous covariates
-  FactorCovariates <- names(COVAR_data)[sapply(COVAR_data,is.factor)]
-  ContCovariates <- setdiff(names(COVAR_data),FactorCovariates)
+  FactorCovariates <- colnames(COVAR_data)[sapply(COVAR_data,is.factor)]
+  ContCovariates <- setdiff(colnames(COVAR_data),FactorCovariates)
   
   # Convert factor covariates to numeric vector
-  COVAR_data[,FactorCovariates] <- lapply(COVAR_data[,FactorCovariates],
+  COVAR_data[,FactorCovariates] <- apply(COVAR_data[,FactorCovariates],2,
                                           function(x){x <- unclass(x)})
     
   # Calculate correlation between compare_data and factor covariates
@@ -103,7 +103,7 @@ calcCompleteCorAndPlot <- function(COMPARE_data, COVAR_data, correlationType, ti
     }
   }
   
-  if (!empty(plotCor)){
+  if (!plyr::empty(plotCor)){
     plot = plotCorWithCompare(plotCor, title, paste("FDR <= ", MAX_FDR, sep=""), markColumnsAsMissing)
   } else{
     plot = NULL
