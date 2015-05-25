@@ -5,11 +5,11 @@ date: "`r date()`"
 output: html_document
 ---
   
-```{r libs, echo=FALSE, warning=FALSE, message=FALSE}
+```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
 ## It is assumed your working directory is where this file
 
 # source('/mnt/Github/knit2synapse-1/R/knitFile2Synapse.R')
-# knitFile2Synapse(file = "./DiffExpAnal_GSE36980_MA.Rmd", owner = '', name = "Differential Expression Analysis GSE36980 MA",overwrite=F)
+# knitFile2Synapse(file = "./DiffExpAnal_GSE36980_MA.Rmd", owner = 'syn4210618', name = "Differential Expression Analysis GSE36980 MA",overwrite=F)
 
 ## Load required libraries
 library(synapseClient)
@@ -104,13 +104,9 @@ unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x)
 3. Significantly changed regions that are also correlated with ADNI.MEM are: `r unique.regions.correlated`
 
 4. Data were obtained from GSE36980 (http://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE36980), and following brain regions were analysed for differential expression between case and control:
-    * entorhinal cortex [significantly correlated]
-    * hippocampus
-    * medial temporal gyrus 
-    * posterior singulate
-    * primary visual cortex
-    * superior frontal gyrus
-
+    * Temporal cortex [significantly corerlated]
+    * Prefrontal cortex
+    * Hippocampus
 ```{r download.data, cache=TRUE}
 # Load series and platform data from GEO
 GSET <- getGEO("GSE36980", GSEMatrix =TRUE)

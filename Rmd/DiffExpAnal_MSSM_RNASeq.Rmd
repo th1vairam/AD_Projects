@@ -9,7 +9,7 @@ output: html_document
 ## It is assumed your working directory is where this file
 
 # source('/mnt/Github/knit2synapse-1/R/knitFile2Synapse.R')
-# knitFile2Synapse(file = "./DiffExpAnal_MSSM-RNASeq.Rmd", owner = 'syn4210618', name = "Differential Expression Analysis MSSM RNASeq",overwrite=F)
+# knitFile2Synapse(file = "./DiffExpAnal_MSSM_RNASeq.Rmd", owner = 'syn4211983', name = "Differential Expression Analysis MSSM RNASeq",overwrite=F)
 
 ## Load required libraries
 library(synapseClient)
@@ -51,7 +51,7 @@ knitr::opts_chunk$set(
   tidy = FALSE)
 ```
 
-```{r synapse.parameters, include=FALSE}
+```{r synapse.parameters, include=FALSE, cache=TRUE}
 # Synapse parameters
 parentId = 'syn3721177';
 activityName = 'Differential expression analysis';
@@ -73,7 +73,7 @@ thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('Rmd/',this
   * travel.depth..median  
   * FreeSurfer.convexity..sulc...median
 
-```{r load.data}
+```{r load.data, cache=TRUE}
 adni.mem.1_5T.3Y <- read.csv('./adni.mem_ranked_1.5T_3Yr_takeda_4_6_15.csv')
 label.name.conversion <- read.csv('./label_names_conversion.csv')
 
@@ -105,9 +105,16 @@ unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x)
 3. Significantly changed regions that are also correlated with ADNI.MEM are: `r unique.regions.correlated`
 
 4. Data were obtained from AMP-AD portal of MSSM, and following brain regions were analysed for differential expression between case and control:
-    * Frontal Pole, 
-    * Superior Temporal Gyrus, [significantly correlated]
-    * Parahippocampal Gyrus
+| Region | Name                      | Remarks                  |
+| :----- | ------------------------- | ------------------------ |
+| BM_10  | Frontal Pole (FP)         |                          |
+| BM_22  | Superior Temporal Gyrus   | significantly correlated |
+| BM_36  | Parahipocampal Gyrus (PHG)|                          |
+
+* BM 10: frontopolar prefrontal cortex, rostrolateral prefrontal cortex, or anterior prefrontal cortex, 
+* BM 22: In humans it corresponds approximately to the lateral and caudal two thirds of the superior temporal gyrus, 
+* BM 36: Ectorhinal area 36 is a subdivision of the cytoarchitecturally defined temporal region of cerebral cortex.
+
 Obtain count matrix and metadata from synapse.
 ```{r download.data, cache=TRUE}
 # Download expression data
@@ -121,13 +128,14 @@ METADATA_ID <- 'syn3205337'
 METADATA_OBJ <- synGet(METADATA_ID)
 ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_ID
 METADATA <- read.table(METADATA_OBJ@filePath,sep='\t',header=T, row.names=1)
+METADATA <- cbind(METADATA, data.frame(Dx = ifelse(METADATA$CDR<1,'Control','AD')))
 ```
 
 ### CPM Normalisation
 Preprocess counts matrix and metadata. Determine design matrix for normalisation and differential expression analysis. 
 
 Remove genes that have less than 1 cpm counts in at least 50% of samples.
-```{r cpmnormalisation}
+```{r cpmnormalisation, cache=TRUE}
 ind <- intersect(rownames(METADATA), colnames(COUNT))
 METADATA <- METADATA[ind,]
 COUNT <- COUNT[, ind]
@@ -137,8 +145,8 @@ PROCESSED_COUNTS = getGeneFilteredGeneExprMatrix(COUNT,MIN_GENE_CPM=1, MIN_SAMPL
 ### Covariate clustering
 Determine relationship between covariates. 
 
-```{r covariates.clustering}
-FactorCovariates <- c('TISSUE','Donor','RACE','CDR','CERJ','SEX','NP.1','bbscore')
+```{r covariates.clustering, cache=TRUE}
+FactorCovariates <- c('TISSUE','Donor','RACE','CDR','CERJ','SEX','NP.1','bbscore','Dx')
 ContCovariates <- c('PMI','AOD','PlaqueMean')
   
 # Find inter relation between factor covariates
@@ -150,8 +158,8 @@ COVARIATES[,FactorCovariates] = lapply(COVARIATES[,FactorCovariates], factor)
 COVARIATES[,ContCovariates] = lapply(COVARIATES[,ContCovariates], as.character)
 COVARIATES[,ContCovariates] = lapply(COVARIATES[,ContCovariates], as.numeric)
 
-COVARIATES <- dplyr::mutate(COVARIATES, TISSUE.CDR = paste(TISSUE,CDR,sep='.'))
-COVARIATES$TISSUE.CDR <- factor(COVARIATES$TISSUE.CDR)
+COVARIATES <- dplyr::mutate(COVARIATES, TISSUE.Dx = paste(TISSUE,Dx,sep='.'))
+COVARIATES$TISSUE.Dx <- factor(COVARIATES$TISSUE.Dx)
 ```
 
 Covariate correlation
@@ -174,9 +182,10 @@ DM = getDesignMatrix(COVARIATES, Intercept = F)
 
 ### Significant Covariates
 Correlation between pca of unadjusted mRNA expression and covariates is used to find significant covariates
-```{r preAdjusted.covariates}
+```{r preAdjusted.covariates, cache=TRUE}
 # Find correlation between PC's of gene expression with covariates
 DESIGN = getDesignMat2Fact(DM$design,FactorCovariates)
+rownames(DESIGN) = rownames(METADATA)
 preAdjustedSigCovars = runPCAandPlotCorrelations(VOOM.GENE_EXPRESSION$E, DESIGN,'NULL design(voom-normalized)', isKeyPlot=TRUE)
 
 # Find significant covariates
@@ -194,11 +203,11 @@ preAdjustedSigCovars[["PC_res"]][[2]]$plotData
 ```
 
 ### Normalisation (custom/manual design)
-Reperform normalisation with custom design matrix (manually with "TISSUE.CDR","SEX","RACE","PMI" as fixed effects and Donor as random effects)
+Reperform normalisation with custom design matrix (manually with "TISSUE.Dx","SEX","RACE","PMI","PlaqueMean" as fixed effects and Donor as random effects)
 
 ```{r reperform.normalisation, cache=TRUE}
 # Post adjusted design matrix
-DM1 = getDesignMatrix(COVARIATES[,c("TISSUE.CDR","SEX","RACE","PMI"),drop=F],Intercept = F)
+DM1 = getDesignMatrix(COVARIATES[,c("TISSUE.Dx","SEX","RACE","PMI","PlaqueMean"),drop=F],Intercept = F)
 DM1$design = DM1$design[,linColumnFinder(DM1$design)$indepCols]
     
 # Estimate correlation of random effects
@@ -237,20 +246,20 @@ residualSigCovars[["PC_res"]][[2]]$plotData
 ```{r contrast.fit, cache=TRUE, fig.height=10, fig.width=15}
 # Make contrast to check differential expression
 CONT.NAMES <- colnames(DM1$design)[grep('BM_10',colnames(DM1$design))]
-CONT.NAMES <- combn(CONT.NAMES,2)
+CONT.NAMES <- combn(CONT.NAMES[2:1],2)
 CONT.NAMES1 <- apply(CONT.NAMES,2,paste,collapse='-')
 
 CONT.NAMES <- colnames(DM1$design)[grep('BM_22',colnames(DM1$design))]
-CONT.NAMES <- combn(CONT.NAMES,2)
+CONT.NAMES <- combn(CONT.NAMES[2:1],2)
 CONT.NAMES2 <- apply(CONT.NAMES,2,paste,collapse='-')
 
 CONT.NAMES <- colnames(DM1$design)[grep('BM_36',colnames(DM1$design))]
-CONT.NAMES <- combn(CONT.NAMES,2)
+CONT.NAMES <- combn(CONT.NAMES[2:1],2)
 CONT.NAMES3 <- apply(CONT.NAMES,2,paste,collapse='-')
 
 CONT.NAMES <- c(CONT.NAMES1,CONT.NAMES2,CONT.NAMES3)
 CONT <- makeContrasts(contrasts=CONT.NAMES,levels=colnames(VOOM.ADJUSTED.FIT$coefficients))
-colnames(CONT) <- gsub('TISSUE.CDR','',colnames(CONT))
+colnames(CONT) <- gsub('TISSUE.Dx','',colnames(CONT))
 
 # Refit contrasts
 FIT.CONTRAST <- contrasts.fit(VOOM.ADJUSTED.FIT,CONT)

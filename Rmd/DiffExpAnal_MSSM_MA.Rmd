@@ -133,9 +133,10 @@ differential.expression <- function(EXPR_ID, COV_ID){
   COV <- fread(COV_OBJ@filePath,sep='\t',header=T,data.table=F)
   rownames(COV) <- COV$BrainBank
   COV <- dplyr::select(COV,-(BrainBank))
+  COV <- dplyr::mutate(COV,Dx = ifelse(CDR<1,'Control','AD'))
 
   # Get covariates classification
-  FactorCovariates <- c('Sex','Race','CDR','Braak','NP1')
+  FactorCovariates <- c('Sex','Race','CDR','Braak','NP1','Dx')
   ContCovariates <- c('PMI','pH','Age','PLQ_Mn','NPrSum','NTrSum')
 
   # Match expression to covariates data
@@ -155,7 +156,7 @@ differential.expression <- function(EXPR_ID, COV_ID){
   print(paste('Significant covariates are:',paste(preAdjustedSigCovars$significantCovars,collapse=',')))
 
   # Get design matrix
-  DESIGN <- getDesignMatrix(COV[,'CDR',drop=F], Intercept = F)
+  DESIGN <- getDesignMatrix(COV[,'Dx',drop=F], Intercept = F)
   print(paste('Fitting linear model with the following coefficients:',paste(colnames(DESIGN$design),collapse=',')))
 
 #   # Calculate correlation between donors
@@ -175,7 +176,7 @@ differential.expression <- function(EXPR_ID, COV_ID){
     print(paste('Following coefficients have to be included in the model:',paste(postAdjustedSigCovars$significantCovars,collapse=',')))
 
   # Make contrast to check differential expression
-  CONT.NAMES <- expand.grid(colnames(DESIGN$design)[1:2],colnames(DESIGN$design)[3:7])
+  CONT.NAMES <- expand.grid(colnames(DESIGN$design)[2],colnames(DESIGN$design)[1])
   CONT.NAMES <- apply(CONT.NAMES,1,paste,collapse ='-')
   
   CONT <- makeContrasts(contrasts=CONT.NAMES,levels=colnames(FIT$coefficients))
