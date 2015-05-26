@@ -203,11 +203,11 @@ preAdjustedSigCovars[["PC_res"]][[2]]$plotData
 ```
 
 ### Normalisation (custom/manual design)
-Reperform normalisation with custom design matrix (manually with "TISSUE.Dx","SEX","RACE","PMI","PlaqueMean" as fixed effects and Donor as random effects)
+Reperform normalisation with custom design matrix (manually with "TISSUE.Dx","SEX","RACE","PMI" as fixed effects and Donor as random effects)
 
 ```{r reperform.normalisation, cache=TRUE}
 # Post adjusted design matrix
-DM1 = getDesignMatrix(COVARIATES[,c("TISSUE.Dx","SEX","RACE","PMI","PlaqueMean"),drop=F],Intercept = F)
+DM1 = getDesignMatrix(COVARIATES[,c("TISSUE.Dx","SEX","RACE","PMI"),drop=F],Intercept = F)
 DM1$design = DM1$design[,linColumnFinder(DM1$design)$indepCols]
     
 # Estimate correlation of random effects
