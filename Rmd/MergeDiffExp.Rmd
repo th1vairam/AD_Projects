@@ -1,0 +1,236 @@
+---
+title: "Meta differential expression analysis of case - control studies in AD"
+author: "Thanneer Perumal"
+date: "`r date()`"
+output: html_document
+---
+```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+## It is assumed your working directory is where this file
+
+# source('/mnt/Github/knit2synapse-1/R/knitFile2Synapse.R')
+# knitFile2Synapse(file = "./DiffExpAnal_GSE36980_MA.Rmd", owner = 'syn4210618', name = "Differential Expression Analysis GSE36980 MA",overwrite=F)
+
+## Load required libraries
+library(synapseClient)
+library(ggplot2)
+library(reshape2)
+library(data.table)
+library(dplyr)
+library(stringr)
+library(limma)
+library(knitr)
+library(Biobase)
+library(GEOquery)
+library(RColorBrewer)
+library(gplots)
+library(WGCNA)
+library(psych)
+library(xlsx)
+
+## Requires ggdendro
+devtools::source_url("https://raw.githubusercontent.com/chr1swallace/random-functions/master/R/ggplot-heatmap.R")
+
+## Needs the dev branch
+library(rGithubClient)
+
+synapseLogin()
+
+# source utility files from ../R/lib folder
+file.sources = list.files('../R/lib',pattern="*.R")
+file.sources = sapply(file.sources,function(x){return(paste('../R/lib',x,sep='/'))})
+tmp = sapply(file.sources,source,.GlobalEnv)
+
+options(xtable.type="html")
+
+knitr::opts_chunk$set(
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  error = FALSE,
+  tidy = FALSE)
+```
+
+```{r synapse.parameters, include=FALSE}
+# Synapse parameters
+parentId = 'syn3721177';
+activityName = 'Differential expression analysis';
+activityDescription = 'Differential expression analysis based on image features';
+
+thisFileName <- 'MergeDiffExp.Rmd'
+
+# Github link
+thisRepo <- getRepo(repository = "th1vairam/Takeda_contract", ref="branch", refName='master')
+thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('Rmd/',thisFileName))
+```
+### Image Analysis (by Arno and Elias)
+1. Image features used:
+  * FreeSurfer.thickness..median
+  * mean.curvature..median         
+  * Volume
+  * travel.depth..median  
+  * FreeSurfer.convexity..sulc...median
+```{r load.data}
+adni.mem.1_5T.3Y <- read.csv('./adni.mem_ranked_1.5T_3Yr_takeda_4_6_15.csv')
+label.name.conversion <- read.csv('./label_names_conversion.csv')
+
+adni.mem.1_5T.3Y <- dplyr::mutate(adni.mem.1_5T.3Y, 
+                                  sig.feature.all = a.ks.pvals <= 0.05 & a.cor.pvals <= 0.05,
+                                  sig.feature.aks = a.ks.pvals <= 0.05,
+                                  feature = sapply(str_split(adni.mem.1_5T.3Y$var.nms,'\\.'),function(x){paste(x[-(length(x))],collapse='.')}),
+                                  region = sapply(str_split(adni.mem.1_5T.3Y$var.nms,'\\.'),function(x){paste(x[(length(x))],collapse='.')}))
+adni.mem.1_5T.3Y <- merge(adni.mem.1_5T.3Y,label.name.conversion, by.x = 'region', by.y = 'Label')
+sig.table.all <- xtabs(sig.feature.all ~ feature + region,data = adni.mem.1_5T.3Y)
+colnames(sig.table.all) <- label.name.conversion[match(label.name.conversion$Label,colnames(sig.table.all)),1]
+
+unique.features <- unique(sapply(str_split(rownames(sig.table.all),'\\.'),function(x){x <- x[x!=""];l <- length(x);ifelse(l>1,paste(x[-(l)],collapse='.'),x)}))
+
+region.ranking <- colSums(sig.table.all[rownames(sig.table.all) %in% c('FreeSurfer.thickness..median','mean.curvature..median','Volume','travel.depth..median','FreeSurfer.convexity..sulc...median'),])
+region.ranking <- sort(region.ranking,decreasing = T)
+region.ranking <- region.ranking[region.ranking!=0]
+
+unique.regions.correlated <- unique(sapply(str_split(names(region.ranking),'-'),function(x){x[[length(x)]]}))
+
+sig.table.aks <- xtabs(sig.feature.aks ~ feature + Label.name, data = adni.mem.1_5T.3Y)
+region.ranking <- colSums(sig.table.aks[rownames(sig.table.aks) %in% c('FreeSurfer.thickness..median','mean.curvature..median','Volume','travel.depth..median','FreeSurfer.convexity..sulc...median'),])
+region.ranking <- sort(region.ranking,decreasing = T)
+region.ranking <- region.ranking[region.ranking!=0]
+unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x){x[[length(x)]]}))
+
+```
+2. Significantly changed regions are: `r unique.regions`
+3. Significantly changed regions that are also correlated with ADNI.MEM are: `r unique.regions.correlated`
+
+### Differential Expression Analysis
+1. Selected studies
+  a. Significantly changed and significantly corelated with ADNI.MEM 
+  
+      |*Study*|*Source*|*Diff exp genes at FDR <= 0.05*|*SynapseID*|
+      |:-------------------------------------------------|---------|-------|-----------:|
+      | GSE36980.MA.TemporalCortex.AD-Control            |	GEO	   | 1356	 | syn4210618 |
+      | GSE5281.MA.EntorhinalCortex.AD-Control           |	GEO	   | 5842  | syn4167496 |
+      | GSE5281.MA.MedialTemporal.AD-Control             |	GEO	   | 10649 | syn4167496 |
+      | GSE5281.MA.SuperiorFrontal.AD-Control            |	GEO	   | 8491  | syn4167496 |
+      | MSSM.MA.MiddleTemporal.DxControl-DxAD            |	AMP-AD | 0	   | syn4164913 |
+      | MSSM.MA.SuperiorTemporal.DxControl-DxAD          |	AMP-AD | 247	 | syn4164913 |
+      | MSSM.MA.InferiorTemporal.DxControl-DxAD          |	AMP-AD | 0	   | syn4164913 |
+      | MSSM.MA.PrecuneusSuperiorParietal.DxControl-DxAD |	AMP-AD | 0     | syn4164913 |
+      | MSSM.MA.CaudalAnteriorCingulate.DxControl-DxAD   |	AMP-AD | 0	   | syn4164913 |
+      | MSSM.RNASeq.SuperiorTemporal.AD-Control          |	AMP-AD | 8215  | syn4211983 |
+  
+  b. Significantly changed
+  
+      |*Study*|*Source*|*Diff exp genes at FDR <= 0.05*|*SynapseID*|
+      |:---------------------------------------------|--------|-------|---------:|  
+      | ROSMAP.RNASeq.PrefrontalCortex.cogdx1-cogdx4 | AMP-AD | 2379	|syn4239880|
+      | HBTRC.MA.PrefrontalCortex.AD-Control         |        | 14	  |syn2318476|
+      | MEYERS2.MA.PrefrontalCortex.AD-Control       |        |	12265	|syn2318338|
+      | GSE36980.MA.FrontalCortex.AD-Control         | GEO	  | 12	  |syn4210618|
+      | GSE36980.MA.Hippocampus.AD-Control           | GEO	  | 5846	|syn4210618|
+      | GSE5281.MA.Hippocampus.AD-Control            | GEO	  | 3630	|syn4167496|
+      | GSE29378.MA.Hippocampus.AD-Control           | GEO	  | 1871	|syn4185900|
+      | MSSM.MA.Hippocampal.DxControl-DxAD	         | AMP-AD	| 0	    |syn4164913|
+      | MSSM.RNASeq.Parahipocampal.AD-Control	       | AMP-AD |	13115 |syn4211983|
+  
+  c. Prominent/important studies
+  
+      |*Study*|*Source*|*Diff exp genes at FDR <= 0.05*|*SynapseID*|
+      |:---------------------------------------------|--------|-------|---------:|  
+      | GSE5281.MA.Posteriorcingulate.AD-Control     | GEO	  | 6218	|syn4167496|
+      | GSE5281.MA.PrimaryVisual.AD-Control          | GEO	  | 229	  |syn4167496|
+      | MSSM.MA.FrontalPole.DxControl-DxAD	         | AMP-AD |	0	    |syn4164913|
+      | MSSM.RNASeq.FrontalPole.AD-Control	         | AMP-AD |	5723	|syn4211983|
+
+```{r extract.data, cache=T}
+# Extract all p-values
+Files <- synQuery('select name,id from file where parentId == "syn3721177"')
+Files <- Files[grep('adjPval',Files$file.name),]
+ALL_USED_IDs = Files$file.id
+
+# Download Pvalues
+PVAL <- lapply(Files$file.id,function(id){val <- fread(synGet(id)@filePath, data.table=F);return(val)})
+PVAL <- join_all(PVAL,by = 'hgnc_symbol',match='all')
+PVAL <- PVAL[,-which(colnames(PVAL) %in% 'ensembl_gene_id')]
+
+# Get Meyers2 expression data
+MEYERS2_ID = 'syn2318338'
+ALL_USED_IDs[length(ALL_USED_IDs)+1] = MEYERS2_ID
+MEYERS2_OBJ = synGet(MEYERS2_ID)
+MEYERS2 = read.csv('./SageBio_Myersv2_Yr2_AllGenesClinCorrelation_ 040713.csv')
+MEYERS2 = dplyr::select(MEYERS2,MMSE,X.16) # Choosing only the adjusted pvalue of Dx based differential expression
+MEYERS2 = MEYERS2[-(1),]
+colnames(MEYERS2) = c('hgnc_symbol','MEYERS2.MA.PrefrontalCortex.AD-Control')
+MEYERS2[,2] = as.numeric(as.character(MEYERS2[,2]))
+
+# Get HBTRC expression data
+HBTRC_ID = 'syn2318476'
+ALL_USED_IDs[length(ALL_USED_IDs)+1] = HBTRC_ID
+HBTRC_OBJ = synGet(HBTRC_ID)
+HBTRC = read.csv('./TAK_pfc_ranking_original.csv')
+HBTRC = dplyr::select(HBTRC,Symbol,p.value.DE) # Choosing only the adjusted pvalue of Dx based differential expression
+colnames(HBTRC) = c('hgnc_symbol','HBTRC.MA.PrefrontalCortex.AD-Control')
+
+# Combine all studeis in to one data frame
+PVAL = join_all(list(PVAL,HBTRC,MEYERS2), by = 'hgnc_symbol', match='all')
+PVAL = PVAL[,-setdiff(grep('ROSMAP.RNASeq.PrefrontalCortex',colnames(PVAL)), grep('cogdx1-cogdx4',colnames(PVAL)))]
+```
+
+```{r get.differential.expression, fig.height = 30, fig.width=15}
+# Get number of significantly differentialy expressed genes with adj.P.Val <= 0.05
+tmp <- as.data.frame(colSums(PVAL[,-(1)]<=0.05, na.rm = T))
+colnames(tmp) <- 'Diff exp genes at FDR <= 0.05'
+kable(tmp)
+
+# Plot the distribution of all pvalues
+attach(mtcars)
+par(mfrow=c(4,6))
+for(cols in colnames(PVAL)[2:dim(PVAL)[2]])
+  hist(PVAL[,cols], main = cols, xlab= 'adj.P.Val')
+
+# Get pvalues without NA
+PVAL.WithOutNA <- PVAL[!is.na(rowSums(PVAL[,-(1)])),]
+```
+
+```{r combine.pvals, cache=TRUE, echo=TRUE}
+# Rank combination of pvalues: ADNI-mem correlate image related studies
+Corr.Image.Sig.Set = data.frame(hgnc_symbol = PVAL.WithOutNA[,1], 
+                                percent.in.corr.image.sig = rowSums(PVAL.WithOutNA[, c('GSE36980.MA.TemporalCortex.AD-Control',
+                                                                                       'GSE5281.MA.EntorhinalCortex.AD-Control',
+                                                                                       'GSE5281.MA.MedialTemporal.AD-Control',
+                                                                                       'GSE5281.MA.SuperiorFrontal.AD-Control',
+                                                                                       'MSSM.MA.SuperiorTemporal.DxControl-DxAD',
+                                                                                       'MSSM.RNASeq.SuperiorTemporal.AD-Control')] <= 0.05)/6)
+
+# Rank combination of pvalues: Image related studies
+Image.Sig.Set =  data.frame(hgnc_symbol = PVAL.WithOutNA[,1],
+                            percent.in.image.sig = rowSums(PVAL.WithOutNA[, c('ROSMAP.RNASeq.PrefrontalCortex.cogdx1-cogdx4',
+                                                                              'HBTRC.MA.PrefrontalCortex.AD-Control',
+                                                                              'MEYERS2.MA.PrefrontalCortex.AD-Control',
+                                                                              'GSE36980.MA.FrontalCortex.AD-Control',
+                                                                              'GSE36980.MA.Hippocampus.AD-Control',
+                                                                              'GSE5281.MA.Hippocampus.AD-Control',
+                                                                              'GSE29378.MA.Hippocampus.AD-Control',                                                                    
+                                                                              'MSSM.RNASeq.Parahipocampal.AD-Control')] <= 0.05)/8)
+
+# Rank combination of pvalues: other studies
+Other.Set = data.frame(hgnc_symbol = PVAL.WithOutNA[,1], 
+                       percent.in.other.sig = rowSums(PVAL.WithOutNA[, c('GSE5281.MA.Posteriorcingulate.AD-Control',
+                                                                         'GSE5281.MA.PrimaryVisual.AD-Control',
+                                                                         'MSSM.RNASeq.FrontalPole.AD-Control')] <= 0.05)/3)
+
+# Combine all sets 
+All.Set = data.frame(hgnc_symbol = PVAL.WithOutNA[,1], 
+                       percent.in.all = (3/6)*Corr.Image.Sig.Set$percent.in.corr.image.sig+(2/6)*Image.Signi.Set$percent.in.image.sig+(1/6)*Other.Set$percent.in.other.sig)
+RANKS <- join_all(list(Corr.Image.Sig.Set,Image.Signi.Set,Other.Set,All.Set), by = 'hgnc_symbol')             
+```
+### Store files in synapse
+```{r synapse.store, include=FALSE, eval=TRUE}
+# Code
+CODE <- File(paste0('./',thisFileName), name = "Differential Expression Merge", parentId = parentId)
+CODE <- synStore(CODE, used = ALL_USED_IDs, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
+
+# Combined Pvalue Table
+PVAL.Table <- as.tableColumns(PVAL)
+schema <- TableSchema(name="Differential Expression Merged Pvals", parent = parentId, columns=PVAL.Table$tableColumns)
+table <- Table(schema, PVAL.Table$fileHandleId)
+PVAL_OBJ <- synStore(table, used = ALL_USED_IDs, activityName = activityName, executed=CODE$properties$id, activityDescription = activityDescription)
+```
