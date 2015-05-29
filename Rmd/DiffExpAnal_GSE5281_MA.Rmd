@@ -25,6 +25,7 @@ library(RColorBrewer)
 library(gplots)
 library(WGCNA)
 library(psych)
+library(plyr)
 
 ## Requires ggdendro
 devtools::source_url("https://raw.githubusercontent.com/chr1swallace/random-functions/master/R/ggplot-heatmap.R")
@@ -186,12 +187,12 @@ if (length(postAdjustedSigCovars$significantCovars) != 0)
   print(paste('Following coefficients have to be included in the model:',paste(postAdjustedSigCovars$significantCovars,collapse=',')))
 
 # Make contrast to check differential expression
-CONT.NAMES <- c("Region.Diseaseentorhinal_cortex_.alzheimer_s_disease_-Region.Diseaseentorhinal_cortex_.normal_",
-                "Region.Diseasehippocampus_.alzheimer_s_disease_-Region.Diseasehippocampus_.normal_",
-                "Region.Diseasemedial_temporal_gyrus_.alzheimer_s_disease_-Region.Diseasemedial_temporal_gyrus_.normal_",
-                "Region.Diseaseposterior_singulate_.alzheimer_s_disease_-Region.Diseaseposterior_singulate_.normal_",
-                "Region.Diseaseprimary_visual_cortex_.alzheimer_s_disease_-Region.Diseaseprimary_visual_cortex_.normal_",
-                "Region.Diseasesuperior_frontal_gyrus_.alzheimer_s_disease_-Region.Diseasesuperior_frontal_gyrus_.normal_")
+CONT.NAMES <- c("Region.Diseaseentorhinal_cortex.alzheimer_s_disease-Region.Diseaseentorhinal_cortex.normal",
+                "Region.Diseasehippocampus.alzheimer_s_disease-Region.Diseasehippocampus.normal",
+                "Region.Diseasemedial_temporal_gyrus.alzheimer_s_disease-Region.Diseasemedial_temporal_gyrus.normal",
+                "Region.Diseaseposterior_singulate.alzheimer_s_disease-Region.Diseaseposterior_singulate.normal",
+                "Region.Diseaseprimary_visual_cortex.alzheimer_s_disease-Region.Diseaseprimary_visual_cortex.normal",
+                "Region.Diseasesuperior_frontal_gyrus.alzheimer_s_disease-Region.Diseasesuperior_frontal_gyrus.normal")
 CONT <- makeContrasts(contrasts=CONT.NAMES,levels=colnames(FIT$coefficients))
 colnames(CONT) <- gsub('Region.Disease','',colnames(CONT))
 
@@ -226,13 +227,13 @@ kable(tmp)
 # Get fold change and pvalues
 FC <- DEXP$logFC
 colnames(FC) <- c('GSE5281.MA.EntorhinalCortex.AD-Control','GSE5281.MA.Hippocampus.AD-Control','GSE5281.MA.MedialTemporal.AD-Control',
-                  'GSE5281.MA.Posteriorcingulate.AD-Control','GSE5281.MA.PrimaryVisual.AD-Control')
-FC <- rownameToFirstColumn(DEXP$logFC,"hgnc_symbol")
+                  'GSE5281.MA.Posteriorcingulate.AD-Control','GSE5281.MA.PrimaryVisual.AD-Control','GSE5281.MA.SuperiorFrontal.AD-Control')
+FC <- rownameToFirstColumn(FC,"hgnc_symbol")
 
 PVAL<- DEXP$adj.P.Val
 colnames(PVAL) <- c('GSE5281.MA.EntorhinalCortex.AD-Control','GSE5281.MA.Hippocampus.AD-Control','GSE5281.MA.MedialTemporal.AD-Control',
-                  'GSE5281.MA.Posteriorcingulate.AD-Control','GSE5281.MA.PrimaryVisual.AD-Control')
-PVAL <- rownameToFirstColumn(DEXP$adj.P.Val,"hgnc_symbol")
+                  'GSE5281.MA.Posteriorcingulate.AD-Control','GSE5281.MA.PrimaryVisual.AD-Control','GSE5281.MA.SuperiorFrontal.AD-Control')
+PVAL <- rownameToFirstColumn(PVAL,"hgnc_symbol")
 ```
 ### Store files in synapse
 ```{r synapse.store, include=FALSE, eval=TRUE}
@@ -241,13 +242,11 @@ CODE <- File(paste0('./',thisFileName), name = "Differential Expression Analysis
 CODE <- synStore(CODE, used = ALL_USED_IDs, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
       
 # Fold change
-FC <- FC[, unique(colnames(FC))]
 write.table(FC, file='./FoldChange_GSE5281_MA.tsv', sep='\t', row.names=F, quote=F)
 FC_OBJ <- File('./FoldChange_GSE5281_MA.tsv',name = 'Differential Expression Analysis GSE5281 MA logFC',parentId = parentId)
 FC_OBJ <- synStore(FC_OBJ, used = ALL_USED_IDs, activityName = activityName, executed=CODE$properties$id, activityDescription = activityDescription)
     
 # Pvalue
-PVAL <- PVAL[, unique(colnames(PVAL))]
 write.table(PVAL, file='./AdjustedPval_GSE5281_MA.tsv', sep='\t', row.names=F, quote=F)
 PVAL_OBJ <- File('./AdjustedPval_GSE5281_MA.tsv',name = 'Differential Expression Analysis GSE5281 MA adjPval',parentId = parentId)
 PVAL_OBJ <- synStore(PVAL_OBJ, used = ALL_USED_IDs, activityName = activityName, executed=CODE$properties$id, activityDescription = activityDescription)

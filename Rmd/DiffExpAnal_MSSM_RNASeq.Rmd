@@ -274,10 +274,13 @@ colnames(tmp) <- 'Diff exp probes at FDR <= 0.05'
 kable(tmp)
 
 # Get fold change and pvalues
-FC <- rownameToFirstColumn(DEXP$logFC,"EnsembleID")
+FC <- DEXP$logFC
 colnames(FC) <- c('MSSM.RNASeq.FrontalPole.AD-Control','MSSM.RNASeq.SuperiorTemporal.AD-Control','MSSM.RNASeq.Parahipocampal.AD-Control')
-PVAL <- rownameToFirstColumn(DEXP$adj.P.Val,"EnsembleID")
+FC <- rownameToFirstColumn(FC,"EnsembleID")
+
+PVAL <- DEXP$adj.P.Val
 colnames(PVAL) <- c('MSSM.RNASeq.FrontalPole.AD-Control','MSSM.RNASeq.SuperiorTemporal.AD-Control','MSSM.RNASeq.Parahipocampal.AD-Control')
+PVAL <- rownameToFirstColumn(PVAL,"EnsembleID")
 ```
 
 ```{r get.gene.symbols, cache=TRUE}

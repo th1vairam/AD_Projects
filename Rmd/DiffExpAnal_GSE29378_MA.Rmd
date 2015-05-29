@@ -239,11 +239,11 @@ kable(tmp)
 # Get fold change and pvalues
 FC <- DEXP$logFC
 colnames(FC) <- 'GSE29378.MA.Hippocampus.AD-Control'
-FC <- rownameToFirstColumn(DEXP$logFC,"hgnc_symbol")
+FC <- rownameToFirstColumn(FC,"hgnc_symbol")
 
 PVAL<- DEXP$adj.P.Val
 colnames(PVAL) <- 'GSE29378.MA.Hippocampus.AD-Control'
-PVAL <- rownameToFirstColumn(DEXP$adj.P.Val,"hgnc_symbol")
+PVAL <- rownameToFirstColumn(PVAL,"hgnc_symbol")
 ```
 ### Store files in synapse
 ```{r synapse.store, include=FALSE, eval=TRUE}
