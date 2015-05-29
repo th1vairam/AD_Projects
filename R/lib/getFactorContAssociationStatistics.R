@@ -2,11 +2,15 @@
 # Inspired from http://stats.stackexchange.com/questions/108007/correlations-with-categorical-variables
 getFactorContAssociationStatistics <- function(factorContNames,COVARIATES, na.action='remove', 
                                                alpha = 0.05){
-  
-  require(psych)
-  
   if (na.action == "remove")
     COVARIATES = na.omit(COVARIATES[,factorContNames])
+  
+  COVARIATES[,factorContNames] <- lapply(COVARIATES[,factorContNames],function(cols){
+    if(is.character(cols)){
+      cols <- as.numeric(unclass(as.factor(cols)))
+    }
+    return(cols)
+  })
   
   stats = ICC(COVARIATES[,factorContNames], alpha = alpha)
   
