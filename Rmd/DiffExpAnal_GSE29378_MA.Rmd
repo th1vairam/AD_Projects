@@ -4,7 +4,6 @@ author: "Thanneer Perumal"
 date: "`r date()`"
 output: html_document
 ---
-  
 ```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
 ## It is assumed your working directory is where this file
 
@@ -62,16 +61,13 @@ thisFileName <- 'DiffExpAnal_GSE29378_MA.Rmd'
 thisRepo <- getRepo(repository = "th1vairam/Takeda_contract", ref="branch", refName='master')
 thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('Rmd/',thisFileName))
 ```
-
 ### Image Analysis
-
 1. Image features used:
   * FreeSurfer.thickness..median  
   * mean.curvature..median         
   * Volume
   * travel.depth..median  
   * FreeSurfer.convexity..sulc...median
-
 ```{r load.data}
 adni.mem.1_5T.3Y <- read.csv('./adni.mem_ranked_1.5T_3Yr_takeda_4_6_15.csv')
 label.name.conversion <- read.csv('./label_names_conversion.csv')
@@ -102,10 +98,8 @@ unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x)
 ```
 2. Significantly changed regions are: `r unique.regions`
 3. Significantly changed regions that are also correlated with ADNI.MEM are: `r unique.regions.correlated`
-
 4. Data were obtained from GSE29378 (http://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE29378), and following brain regions were analysed for differential expression between case and control:
     * hippocampus CA1 and CA3
-    
 ```{r download.data, cache=TRUE}
 # Load series and platform data from GEO
 GSET <- getGEO("GSE29378", GSEMatrix =TRUE)
@@ -171,7 +165,6 @@ PHENO.DATA$status <- factor(PHENO.DATA$status)
 
 rownames(PHENO.DATA) <- colnames(EXPR)
 ```
-
 Correlation between covariates
 ```{r pheno.correlation, fig.width=7,fig.height=7}
 COVARIATES.CORRELATION = getAssociationStatistics(PHENO.DATA, PVAL = 1)
@@ -244,13 +237,15 @@ colnames(tmp) <- 'Diff exp probes at FDR <= 0.05'
 kable(tmp)
 
 # Get fold change and pvalues
-FC <- rownameToFirstColumn(DEXP$logFC,"GeneSymbol")
-PVAL <- rownameToFirstColumn(DEXP$adj.P.Val,"GeneSymbol")
+FC <- DEXP$logFC
+colnames(FC) <- 'GSE29378.MA.Hippocampus.AD-Control'
+FC <- rownameToFirstColumn(DEXP$logFC,"hgnc_symbol")
 
+PVAL<- DEXP$adj.P.Val
+colnames(PVAL) <- 'GSE29378.MA.Hippocampus.AD-Control'
+PVAL <- rownameToFirstColumn(DEXP$adj.P.Val,"hgnc_symbol")
 ```
-
 ### Store files in synapse
- 
 ```{r synapse.store, include=FALSE, eval=TRUE}
 # Code
 CODE <- File(paste0('./',thisFileName), name = "Differential Expression Analysis GSE29378 MA", parentId = parentId)

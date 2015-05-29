@@ -26,12 +26,14 @@ library(gplots)
 library(WGCNA)
 library(psych)
 library(edgeR)
+library(biomaRt)
+
+## Needs the dev branch
+library(rGithubClient)
 
 ## Requires ggdendro
 devtools::source_url("https://raw.githubusercontent.com/chr1swallace/random-functions/master/R/ggplot-heatmap.R")
 
-## Needs the dev branch
-library(rGithubClient)
 
 synapseLogin()
 
@@ -95,7 +97,6 @@ region.ranking <- colSums(sig.table.aks[rownames(sig.table.aks) %in% c('FreeSurf
 region.ranking <- sort(region.ranking,decreasing = T)
 region.ranking <- region.ranking[region.ranking!=0]
 unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x){x[[length(x)]]}))
-
 ```
 2. Significantly changed regions are: `r unique.regions`
 3. Significantly changed regions that are also correlated with ADNI.MEM are: `r unique.regions.correlated`
@@ -293,12 +294,29 @@ colnames(tmp) <- 'Diff exp probes at FDR <= 0.05'
 kable(tmp)
 
 # Get fold change and pvalues
-FC <- rownameToFirstColumn(DEXP$logFC,"EnsembleID")
-PVAL <- rownameToFirstColumn(DEXP$adj.P.Val,"EnsembleID")
+FC <- DEXP$logFC
+colnames(FC) <- paste('ROSMAP.RNASeq.PrefrontalCortex',colnames(FC),sep='.')
+FC <- rownameToFirstColumn(FC,"EnsembleID")
+FC[,1] <- str_split_fixed(FC$EnsembleID,"\\.",n=2)[,1]
+
+PVAL <- DEXP$adj.P.Val
+colnames(PVAL) <- paste('ROSMAP.RNASeq.PrefrontalCortex',colnames(PVAL),sep='.')
+PVAL <- rownameToFirstColumn(PVAL,"EnsembleID")
+PVAL[,1] <- str_split_fixed(PVAL$EnsembleID,"\\.",n=2)[,1]
 ```
 
+```{r get.gene.symbols, cache=TRUE}
+# Define biomart object
+mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+
+# Query biomart
+Ensemble2HGNC <- getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                       filters = "ensembl_gene_id", values = FC$EnsembleID,
+                       mart = mart)
+FC <- merge(Ensemble2HGNC,FC,by.x='ensembl_gene_id',by.y='EnsembleID',all=T)
+PVAL <- merge(Ensemble2HGNC,PVAL,by.x='ensembl_gene_id',by.y='EnsembleID',all=T)
+```
 ### Store files in synapse
- 
 ```{r synapse.store, include=FALSE, eval=TRUE}
 # Code
 CODE <- File(paste0('./',thisFileName), name = "Differential Expression Analysis ROSMAP RNASeq", parentId = parentId)

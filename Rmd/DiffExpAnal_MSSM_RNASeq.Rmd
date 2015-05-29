@@ -4,7 +4,6 @@ author: "Thanneer Perumal"
 date: "`r date()`"
 output: html_document
 ---
-  
 ```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
 ## It is assumed your working directory is where this file
 
@@ -27,6 +26,7 @@ library(gplots)
 library(WGCNA)
 library(psych)
 library(edgeR)
+library(biomaRt)
 
 ## Requires ggdendro
 devtools::source_url("https://raw.githubusercontent.com/chr1swallace/random-functions/master/R/ggplot-heatmap.R")
@@ -63,16 +63,13 @@ thisFileName <- 'DiffExpAnal_MSSM_RNASeq.Rmd'
 thisRepo <- getRepo(repository = "th1vairam/Takeda_contract", ref="branch", refName='master')
 thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('Rmd/',thisFileName))
 ```
-
 ### Image Analysis
-
 1. Image features used:
   * FreeSurfer.thickness..median  
   * mean.curvature..median         
   * Volume
   * travel.depth..median  
   * FreeSurfer.convexity..sulc...median
-
 ```{r load.data, cache=TRUE}
 adni.mem.1_5T.3Y <- read.csv('./adni.mem_ranked_1.5T_3Yr_takeda_4_6_15.csv')
 label.name.conversion <- read.csv('./label_names_conversion.csv')
@@ -103,7 +100,6 @@ unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x)
 ```
 2. Significantly changed regions are: `r unique.regions`
 3. Significantly changed regions that are also correlated with ADNI.MEM are: `r unique.regions.correlated`
-
 4. Data were obtained from AMP-AD portal of MSSM, and following brain regions were analysed for differential expression between case and control:
 | Region | Name                      | Remarks                  |
 | :----- | ------------------------- | ------------------------ |
@@ -130,7 +126,6 @@ ALL_USED_IDs[length(ALL_USED_IDs)+1] = METADATA_ID
 METADATA <- read.table(METADATA_OBJ@filePath,sep='\t',header=T, row.names=1)
 METADATA <- cbind(METADATA, data.frame(Dx = ifelse(METADATA$CDR<1,'Control','AD')))
 ```
-
 ### CPM Normalisation
 Preprocess counts matrix and metadata. Determine design matrix for normalisation and differential expression analysis. 
 
@@ -141,7 +136,6 @@ METADATA <- METADATA[ind,]
 COUNT <- COUNT[, ind]
 PROCESSED_COUNTS = getGeneFilteredGeneExprMatrix(COUNT,MIN_GENE_CPM=1, MIN_SAMPLE_PERCENT_WITH_MIN_GENE_CPM=0.5)
 ```
-
 ### Covariate clustering
 Determine relationship between covariates. 
 
@@ -161,17 +155,13 @@ COVARIATES[,ContCovariates] = lapply(COVARIATES[,ContCovariates], as.numeric)
 COVARIATES <- dplyr::mutate(COVARIATES, TISSUE.Dx = paste(TISSUE,Dx,sep='.'))
 COVARIATES$TISSUE.Dx <- factor(COVARIATES$TISSUE.Dx)
 ```
-
 Covariate correlation
-
 ```{r covariates.correlation, fig.width=10, fig.height=10}
 COVARIATES.CORRELATION = getAssociationStatistics(COVARIATES, PVAL = 1)
 ggheatmap.show(COVARIATES.CORRELATION$plot, col.width=0.3, row.width=0.15)
 ```
-
 ### Normalisation (with NULL)
 Initial normalisation usign voom (with NULL design)
-
 ```{r initial.voom.normalisation}
 # Initial normalisation of gene expression
 VOOM.GENE_EXPRESSION = voom(PROCESSED_COUNTS$filteredExprMatrix, design=NULL, plot=T)
@@ -179,7 +169,6 @@ VOOM.GENE_EXPRESSION = voom(PROCESSED_COUNTS$filteredExprMatrix, design=NULL, pl
 # Initial design matrix with covariates under consideration
 DM = getDesignMatrix(COVARIATES, Intercept = F)
 ```
-
 ### Significant Covariates
 Correlation between pca of unadjusted mRNA expression and covariates is used to find significant covariates
 ```{r preAdjusted.covariates, cache=TRUE}
@@ -191,9 +180,7 @@ preAdjustedSigCovars = runPCAandPlotCorrelations(VOOM.GENE_EXPRESSION$E, DESIGN,
 # Find significant covariates
 adjustCovars = designMatVarsToCovars(getCovariatesMap(DM),preAdjustedSigCovars$significantCovars)
 ```
-
 Significant covariates to adjust at FDR 0.1 are `r adjustCovars`
-
 ```{r preAdjustedSigCovars.NULL, fig.width=15, fig.height=8}
 preAdjustedSigCovars[["PC_res"]][[1]]$plotData
 ```
@@ -201,10 +188,8 @@ preAdjustedSigCovars[["PC_res"]][[1]]$plotData
 ```{r preAdjustedSigCovars.NULL.ALL, fig.width=15, fig.height=8}
 preAdjustedSigCovars[["PC_res"]][[2]]$plotData
 ```
-
 ### Normalisation (custom/manual design)
 Reperform normalisation with custom design matrix (manually with "TISSUE.Dx","SEX","RACE","PMI" as fixed effects and Donor as random effects)
-
 ```{r reperform.normalisation, cache=TRUE}
 # Post adjusted design matrix
 DM1 = getDesignMatrix(COVARIATES[,c("TISSUE.Dx","SEX","RACE","PMI"),drop=F],Intercept = F)
@@ -242,19 +227,18 @@ residualSigCovars[["PC_res"]][[2]]$plotData
 ```
  
 ### Differential Expression
- 
 ```{r contrast.fit, cache=TRUE, fig.height=10, fig.width=15}
 # Make contrast to check differential expression
 CONT.NAMES <- colnames(DM1$design)[grep('BM_10',colnames(DM1$design))]
-CONT.NAMES <- combn(CONT.NAMES[2:1],2)
+CONT.NAMES <- combn(CONT.NAMES,2)
 CONT.NAMES1 <- apply(CONT.NAMES,2,paste,collapse='-')
 
 CONT.NAMES <- colnames(DM1$design)[grep('BM_22',colnames(DM1$design))]
-CONT.NAMES <- combn(CONT.NAMES[2:1],2)
+CONT.NAMES <- combn(CONT.NAMES,2)
 CONT.NAMES2 <- apply(CONT.NAMES,2,paste,collapse='-')
 
 CONT.NAMES <- colnames(DM1$design)[grep('BM_36',colnames(DM1$design))]
-CONT.NAMES <- combn(CONT.NAMES[2:1],2)
+CONT.NAMES <- combn(CONT.NAMES,2)
 CONT.NAMES3 <- apply(CONT.NAMES,2,paste,collapse='-')
 
 CONT.NAMES <- c(CONT.NAMES1,CONT.NAMES2,CONT.NAMES3)
@@ -291,11 +275,23 @@ kable(tmp)
 
 # Get fold change and pvalues
 FC <- rownameToFirstColumn(DEXP$logFC,"EnsembleID")
+colnames(FC) <- c('MSSM.RNASeq.FrontalPole.AD-Control','MSSM.RNASeq.SuperiorTemporal.AD-Control','MSSM.RNASeq.Parahipocampal.AD-Control')
 PVAL <- rownameToFirstColumn(DEXP$adj.P.Val,"EnsembleID")
+colnames(PVAL) <- c('MSSM.RNASeq.FrontalPole.AD-Control','MSSM.RNASeq.SuperiorTemporal.AD-Control','MSSM.RNASeq.Parahipocampal.AD-Control')
 ```
 
+```{r get.gene.symbols, cache=TRUE}
+# Define biomart object
+mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+
+# Query biomart
+Ensemble2HGNC <- getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                       filters = "ensembl_gene_id", values = FC$EnsembleID,
+                       mart = mart)
+FC <- merge(Ensemble2HGNC,FC,by.x='ensembl_gene_id',by.y='EnsembleID',all=T)
+PVAL <- merge(Ensemble2HGNC,PVAL,by.x='ensembl_gene_id',by.y='EnsembleID',all=T)
+```
 ### Store files in synapse
- 
 ```{r synapse.store, include=FALSE, eval=TRUE}
 # Code
 CODE <- File(paste0('./',thisFileName), name = "Differential Expression Analysis MSSM RNASeq", parentId = parentId)

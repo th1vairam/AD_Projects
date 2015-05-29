@@ -4,7 +4,6 @@ author: "Thanneer Perumal"
 date: "`r date()`"
 output: html_document
 ---
-
 ```{r libs, echo=FALSE, warning=FALSE, message=FALSE}
 ## It is assumed your working directory is where this file
 
@@ -62,9 +61,7 @@ thisFileName <- 'DiffExpAnal_MSSM_MA.Rmd'
 thisRepo <- getRepo(repository = "th1vairam/Takeda_contract", ref="branch", refName='master')
 thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('Rmd/',thisFileName))
 ```
-
 ### Image Analysis
-
 1. Image features used:
   * FreeSurfer.thickness..median  
   * mean.curvature..median         
@@ -205,9 +202,7 @@ differential.expression <- function(EXPR_ID, COV_ID){
   return(list(FIT = FIT, FIT.CONTRAST = FIT.CONTRAST, DEXP = DEXP, ANNOTATIONS = ANNOTATIONS))
 }
 ```
-
 ### Middle Temporal Analysis
-
 ```{r middle.temporal, cache=TRUE, fig.height=10, fig.width=15}
 # SynIDs of expression and covariates matrix
 EXP_ID <- 'syn3191101'
@@ -224,16 +219,14 @@ kable(tmp)
 
 # Get fold change and pvalues
 FC <- DIFF.EXP$DEXP$logFC
-colnames(FC) <- paste('middle.temporal',colnames(FC),sep='.')
-FC <- rownameToFirstColumn(FC,'GeneSymbol')
+colnames(FC) <- paste('MSSM.MA.MiddleTemporal',colnames(FC),sep='.')
+FC <- rownameToFirstColumn(FC,'hgnc_symbol')
 
 PVAL <- DIFF.EXP$DEXP$adj.P.Val
-colnames(PVAL) <- paste('middle.temporal',colnames(PVAL),sep='.')
-PVAL <- rownameToFirstColumn(PVAL,'GeneSymbol')
+colnames(PVAL) <- paste('MSSM.MA.MiddleTemporal',colnames(PVAL),sep='.')
+PVAL <- rownameToFirstColumn(PVAL,'hgnc_symbol')
 ```
-
 ### Superior Temporal Analysis 
-
 ```{r superior.temporal, cache=TRUE, fig.height=10, fig.width=15}
 # SynIDs of expression and covariates matrix
 EXP_ID <- 'syn3191103'
@@ -249,16 +242,14 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.SuperiorTemporal',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.SuperiorTemporal',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 ```
-
 ### Inferior Temporal Analysis 
-
 ```{r inferior.temporal, cache=TRUE, fig.height=10, fig.width=15}
 # SynIDs of expression and covariates matrix
 EXP_ID <- 'syn3191099'
@@ -274,16 +265,14 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.InferiorTemporal',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.InferiorTemporal',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 ```
-
 ### Precuneus Superior Parietal Lobule Analysis
-
 ```{r superior.parietal, cache=TRUE, fig.height=10, fig.width=15}
 # SynIDs of expression and covariates matrix
 EXP_ID <- 'syn3191119'
@@ -299,16 +288,14 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.PrecuneusSuperiorParietal',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.PrecuneusSuperiorParietal',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 ```
-
 ### Caudal Anterior Cingulate Analysis
-
 ```{r anterior.cingulate, cache=TRUE, fig.height=10, fig.width=15}
 # SynIDs of expression and covariates matrix
 EXP_ID <- 'syn3191107'
@@ -324,15 +311,13 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.CaudalAnteriorCingulate',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.CaudalAnteriorCingulate',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 ```
-
-
 ### Hippocampal Analysis
 Hippocampal region shows shape changes but not correltated with ADNIMEM
 ```{r hippocampal, cache=TRUE, fig.height=10, fig.width=15}
@@ -355,14 +340,13 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.Hippocampal',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.Hippocampal',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 ```
-
 ### Frontal Pole Analysis
 Frontal pole analysis was performed (since this is one of the regions for which RNASeq is available from MSSM)
 ```{r frontal.pole, cache=TRUE, fig.height=10, fig.width=15}
@@ -380,16 +364,14 @@ kable(tmp)
 
 # Get fold change and pvalues
 tmp <- DIFF.EXP$DEXP$logFC
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-FC <- join(FC, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.FrontalPole',colnames(tmp),sep='.')
+FC <- join(FC, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 
 tmp <- DIFF.EXP$DEXP$adj.P.Val
-colnames(tmp) <- paste('superior.temporal',colnames(tmp),sep='.')
-PVAL <- join(PVAL, rownameToFirstColumn(tmp,'GeneSymbol'), by = 'GeneSymbol', match = 'all')
+colnames(tmp) <- paste('MSSM.MA.FrontalPole',colnames(tmp),sep='.')
+PVAL <- join(PVAL, rownameToFirstColumn(tmp,'hgnc_symbol'), by = 'hgnc_symbol', match = 'all')
 ```
-
 ### Store files in synapse
- 
 ```{r synapse.store, include=FALSE, eval=TRUE}
 # Code
 CODE <- File(paste0('./',thisFileName), name = "Differential Expression Analysis MSSM MA", parentId = parentId)
