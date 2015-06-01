@@ -54,7 +54,7 @@ knitr::opts_chunk$set(
 
 ```{r synapse.parameters, include=FALSE, cache=TRUE}
 # Synapse parameters
-parentId = 'syn3721177';
+parentId = 'syn4259356';
 activityName = 'Differential expression analysis';
 activityDescription = 'Differential expression analysis based on image features';
 
@@ -64,45 +64,8 @@ thisFileName <- 'DiffExpAnal_ROSMAP_RNASeq.Rmd'
 thisRepo <- getRepo(repository = "th1vairam/Takeda_contract", ref="branch", refName='master')
 thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('Rmd/',thisFileName))
 ```
-### Image Analysis
-1. Image features used:
-  * FreeSurfer.thickness..median  
-  * mean.curvature..median         
-  * Volume
-  * travel.depth..median  
-  * FreeSurfer.convexity..sulc...median
-```{r load.data, cache=TRUE}
-adni.mem.1_5T.3Y <- read.csv('./adni.mem_ranked_1.5T_3Yr_takeda_4_6_15.csv')
-label.name.conversion <- read.csv('./label_names_conversion.csv')
-
-adni.mem.1_5T.3Y <- dplyr::mutate(adni.mem.1_5T.3Y, 
-                                  sig.feature.all = a.ks.pvals <= 0.05 & a.cor.pvals <= 0.05,
-                                  sig.feature.aks = a.ks.pvals <= 0.05,
-                                  feature = sapply(str_split(adni.mem.1_5T.3Y$var.nms,'\\.'),function(x){paste(x[-(length(x))],collapse='.')}),
-                                  region = sapply(str_split(adni.mem.1_5T.3Y$var.nms,'\\.'),function(x){paste(x[(length(x))],collapse='.')}))
-adni.mem.1_5T.3Y <- merge(adni.mem.1_5T.3Y,label.name.conversion, by.x = 'region', by.y = 'Label')
-sig.table.all <- xtabs(sig.feature.all ~ feature + region,data = adni.mem.1_5T.3Y)
-colnames(sig.table.all) <- label.name.conversion[match(label.name.conversion$Label,colnames(sig.table.all)),1]
-
-unique.features <- unique(sapply(str_split(rownames(sig.table.all),'\\.'),function(x){x <- x[x!=""];l <- length(x);ifelse(l>1,paste(x[-(l)],collapse='.'),x)}))
-
-region.ranking <- colSums(sig.table.all[rownames(sig.table.all) %in% c('FreeSurfer.thickness..median','mean.curvature..median','Volume','travel.depth..median','FreeSurfer.convexity..sulc...median'),])
-region.ranking <- sort(region.ranking,decreasing = T)
-region.ranking <- region.ranking[region.ranking!=0]
-
-unique.regions.correlated <- unique(sapply(str_split(names(region.ranking),'-'),function(x){x[[length(x)]]}))
-
-sig.table.aks <- xtabs(sig.feature.aks ~ feature + Label.name, data = adni.mem.1_5T.3Y)
-region.ranking <- colSums(sig.table.aks[rownames(sig.table.aks) %in% c('FreeSurfer.thickness..median','mean.curvature..median','Volume','travel.depth..median','FreeSurfer.convexity..sulc...median'),])
-region.ranking <- sort(region.ranking,decreasing = T)
-region.ranking <- region.ranking[region.ranking!=0]
-unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x){x[[length(x)]]}))
-```
-2. Significantly changed regions are: `r unique.regions`
-3. Significantly changed regions that are also correlated with ADNI.MEM are: `r unique.regions.correlated`
-4. Dorsolateral prefrontal cortex of 724 subjects from the ROS and MAP cohorts were obtained from AMP-AD portal
-
 ### Data download
+Dorsolateral prefrontal cortex of 724 subjects from the ROS and MAP cohorts were obtained from AMP-AD portal
 Obtain count matrix and metadata from synapse.
 ```{r download.data, cache=TRUE}
 # Download expression data
@@ -207,11 +170,11 @@ preAdjustedSigCovars = runPCAandPlotCorrelations(EXPR, DESIGN,'non-normalized', 
 adjustCovars = designMatVarsToCovars(getCovariatesMap(DM),preAdjustedSigCovars$significantCovars)
 ```
 Significant covariates to adjust at FDR 0.1 are `r adjustCovars`
-```{r preAdjustedSigCovars.NULL, fig.width=15, fig.height=8}
+```{r preAdjustedSigCovars.NULL, fig.width=10, fig.height=6}
 preAdjustedSigCovars[["PC_res"]][[1]]$plotData
 ```
 
-```{r preAdjustedSigCovars.NULL.ALL, fig.width=15, fig.height=8}
+```{r preAdjustedSigCovars.NULL.ALL, fig.width=10, fig.height=6}
 preAdjustedSigCovars[["PC_res"]][[2]]$plotData
 ```
 ### Normalisation (custom design)
@@ -303,6 +266,11 @@ PVAL <- DEXP$adj.P.Val
 colnames(PVAL) <- paste('ROSMAP.RNASeq.PrefrontalCortex',colnames(PVAL),sep='.')
 PVAL <- rownameToFirstColumn(PVAL,"EnsembleID")
 PVAL[,1] <- str_split_fixed(PVAL$EnsembleID,"\\.",n=2)[,1]
+
+# Residuals after normalisation but adding back cogdx
+REXPR = calcResiduals(EXPR, DM1$design, varsToAddBackIn = c('cogdx1','cogdx2','cogdx3','cogdx4','cogdx5','cogdx6'))
+REXPR <- rownameToFirstColumn(REXPR,"EnsembleID")
+REXPR[,1] <- str_split_fixed(REXPR$EnsembleID,"\\.",n=2)[,1]
 ```
 
 ```{r get.gene.symbols, cache=TRUE}
@@ -315,6 +283,7 @@ Ensemble2HGNC <- getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
                        mart = mart)
 FC <- merge(Ensemble2HGNC,FC,by.x='ensembl_gene_id',by.y='EnsembleID',all=T)
 PVAL <- merge(Ensemble2HGNC,PVAL,by.x='ensembl_gene_id',by.y='EnsembleID',all=T)
+REXPR <- merge(Ensemble2HGNC,REXPR,by.x='ensembl_gene_id',by.y='EnsembleID',all=T)
 ```
 ### Store files in synapse
 ```{r synapse.store, include=FALSE, eval=TRUE}
@@ -333,8 +302,21 @@ PVAL <- PVAL[, unique(colnames(PVAL))]
 write.table(PVAL, file='./AdjustedPval_ROSMAP_RNASeq.tsv', sep='\t', row.names=F, quote=F)
 PVAL_OBJ <- File('./AdjustedPval_ROSMAP_RNASeq.tsv',name = 'Differential Expression Analysis ROSMAP RNASeq adjPval',parentId = parentId)
 PVAL_OBJ <- synStore(PVAL_OBJ, used = ALL_USED_IDs, activityName = activityName, executed=CODE$properties$id, activityDescription = activityDescription)
+
+# Residual gene expression
+write.table(REXPR, file='./ResidualGeneExpression.tsv', sep='\t', row.names=F, quote=F)
+REXPR_OBJ <- File('./ResidualGeneExpression.tsv',name = 'Differential Expression Analysis ROSMAP RNASeq residuals',parentId = parentId)
+REXPR_OBJ <- synStore(REXPR_OBJ, used = ALL_USED_IDs, activityName = activityName, executed=CODE$properties$id, activityDescription = activityDescription)
+
+# Residual gene expression
+COVARIATE = dplyr::select(COVARIATES, msex, apoe_genotype, race, spanish, cogdx, pmi, educ)
+write.table(COVARIATES, file='./ClinicalCovariates.tsv', sep='\t', row.names=F, quote=F)
+COV_OBJ <- File('./ClinicalCovariates.tsv',name = 'Differential Expression Analysis ROSMAP RNASeq clinical',parentId = parentId)
+COV_OBJ <- synStore(COV_OBJ, used = ALL_USED_IDs, activityName = activityName, executed=CODE$properties$id, activityDescription = activityDescription)
 ```
-|  *Results*           |  *SynapseID*                    |
-|  -------             |   ---------                     |
-|  Log fold change     |  `r FC_OBJ$properties$id`       |
-|  Adjusted pvalues    |  `r PVAL_OBJ$properties$id`     |
+|  *Results*            |  *SynapseID*                    |
+|  -------              |   ---------                     |
+|  Log fold change      |  `r FC_OBJ$properties$id`       |
+|  Adjusted pvalues     |  `r PVAL_OBJ$properties$id`     |
+|  Residuals expression |  `r REXPR_OBJ$properties$id`    |
+|  Clinical variables   |  `r COV_OBJ$properties$id`      |
