@@ -49,7 +49,6 @@ knitr::opts_chunk$set(
   error = FALSE,
   tidy = FALSE)
 ```
-
 ```{r synapse.parameters, include=FALSE}
 # Synapse parameters
 parentId = 'syn4259435';
@@ -98,18 +97,15 @@ unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x)
 ```
 2. Significantly changed regions are: `r unique.regions`
 3. Significantly changed regions that are also correlated with ADNI.MEM are: `r unique.regions.correlated`
-
 ### Differential Expression Analysis
 Selected studies
-
-      |                *Study*                           |*Source* |*SynapseID* |
-      |:-------------------------------------------------|---------|-----------:|
-      | GSE36980.MA.TemporalCortex.AD-Control            |	GEO	   | syn4210618 |
-      | GSE5281.MA.EntorhinalCortex.AD-Control           |	GEO	   | syn4167496 |
-      | GSE5281.MA.MedialTemporal.AD-Control             |	GEO	   | syn4167496 |
-      | GSE5281.MA.SuperiorFrontal.AD-Control            |	GEO	   | syn4167496 |
-      | MSSM.RNASeq.SuperiorTemporal.AD-Control          |	AMP-AD | syn4211983 |
-  
+|                *Study*                           |*Source* |*SynapseID* |
+|:-------------------------------------------------|---------|-----------:|
+| GSE36980.MA.TemporalCortex.AD-Control            |	GEO	   | syn4210618 |
+| GSE5281.MA.EntorhinalCortex.AD-Control           |	GEO	   | syn4167496 |
+| GSE5281.MA.MedialTemporal.AD-Control             |	GEO	   | syn4167496 |
+| GSE5281.MA.SuperiorFrontal.AD-Control            |	GEO	   | syn4167496 |
+| MSSM.RNASeq.SuperiorTemporal.AD-Control          |	AMP-AD | syn4211983 |
 ```{r extract.data, cache=T}
 # Extract all p-values
 File <- synQuery('select id,name from file where parentId == "syn3721177"')
@@ -146,7 +142,7 @@ FC <- FC[, colnames(FC) %in% c('hgnc_symbol',
 colnames(FC)[-(1)] <- paste(str_replace_all(colnames(FC)[-(1)],'[^[:alnum:]]','.'),'logFC',sep='.')
 FC <- FC[!duplicated(FC$hgnc_symbol),]
 ```
-
+Differential Expression Analysis
 ```{r get.differential.expression, fig.width=10, fig.height=8}
 # Get number of significantly differentialy expressed genes with adj.P.Val <= 0.05
 tmp <- as.data.frame(colSums(PVAL[,-(1)]<=0.05, na.rm = T))
@@ -164,8 +160,7 @@ par(mfrow=c(2,3))
 for(cols in colnames(PVAL)[2:dim(PVAL)[2]])
   plot(FC[,gsub('adjPval','logFC',cols)],-log10(PVAL[,cols]), main = gsub('adjPval','',cols), xlab = 'logFC', ylab = '-log10(adj.Pval)')
 ```
-## Ranking
-#### Individual gene ranking
+### Gene ranking
 All five analysis from 3 studies and four different brain regions were combined using a tied ranking scheme. 
 1. -log10 of adjusted (BH corrected) Pvalues were ranked for each individual studies (i.e., higher -log10 pvalue gets higher rank)
 2. absolute log of fold change were ranked for each individual studies (i.e., higher absolute fold change gets higher rank)
@@ -203,7 +198,7 @@ COMBINE = COMBINE[order(COMBINE$rankSum, decreasing =T),]
 COMBINE$Num.studies.diff.exp = rowSums(COMBINE[,grep('adjPval',colnames(COMBINE))]<=0.05,)
   
 # Write to synapse
-write.table(COMBINE, file = './DiffExpAnal_FC_Pval_Rank_Merged',sep='\t', quote=F, row.names=F)
-COMBINE_OBJ <- File('./DiffExpAnal_FC_Pval_Rank_Merged', name = "Differential Expression Analysis logFC adjPval Rank", parentId = parentId)
+write.table(COMBINE, file = './DiffExpAnal_FC_Pval_Rank_Merged.tsv',sep='\t', quote=F, row.names=F)
+COMBINE_OBJ <- File('./DiffExpAnal_FC_Pval_Rank_Merged.tsv', name = "Differential Expression Analysis logFC adjPval Rank", parentId = parentId)
 COMBINE_OBJ <- synStore(COMBINE_OBJ, used = ALL_USED_IDs, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
 ```
