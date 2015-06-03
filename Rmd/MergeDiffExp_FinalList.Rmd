@@ -1,0 +1,209 @@
+---
+title: "Merging differential expression analysis of case - control studies in AD based on ADNI image analysis by Arno and Elias"
+author: "Thanneer Perumal"
+date: "`r date()`"
+output: html_document
+---
+```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+## It is assumed your working directory is where this file
+
+# source('/mnt/Github/knit2synapse-1/R/knitFile2Synapse.R')
+# knitFile2Synapse(file = "./MergeDiffExp_FinalList.Rmd", owner = 'syn4259435', name = "Differential Expression Analysis",overwrite=F)
+
+## Load required libraries
+library(synapseClient)
+library(ggplot2)
+library(reshape2)
+library(data.table)
+library(dplyr)
+library(stringr)
+library(limma)
+library(knitr)
+library(Biobase)
+library(GEOquery)
+library(RColorBrewer)
+library(gplots)
+library(WGCNA)
+library(psych)
+library(xlsx)
+
+## Requires ggdendro
+devtools::source_url("https://raw.githubusercontent.com/chr1swallace/random-functions/master/R/ggplot-heatmap.R")
+
+## Needs the dev branch
+library(rGithubClient)
+
+synapseLogin()
+
+# source utility files from ../R/lib folder
+file.sources = list.files('../R/lib',pattern="*.R")
+file.sources = sapply(file.sources,function(x){return(paste('../R/lib',x,sep='/'))})
+tmp = sapply(file.sources,source,.GlobalEnv)
+
+options(xtable.type="html")
+
+knitr::opts_chunk$set(
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  error = FALSE,
+  tidy = FALSE)
+```
+
+```{r synapse.parameters, include=FALSE}
+# Synapse parameters
+parentId = 'syn4259435';
+activityName = 'Merging differential expression analysis';
+activityDescription = 'Differential expression analysis based on image features';
+
+thisFileName <- 'MergeDiffExp_FinalList.Rmd'
+
+# Github link
+thisRepo <- getRepo(repository = "th1vairam/Takeda_contract", ref="branch", refName='master')
+thisFile <- getPermlink(repository = thisRepo, repositoryPath=paste0('Rmd/',thisFileName))
+```
+### Image Analysis (by Arno and Elias)
+1. Image features used:
+  * FreeSurfer.thickness..median
+  * mean.curvature..median         
+  * Volume
+  * travel.depth..median  
+  * FreeSurfer.convexity..sulc...median
+```{r load.data}
+adni.mem.1_5T.3Y <- read.csv('./adni.mem_ranked_1.5T_3Yr_takeda_4_6_15.csv')
+label.name.conversion <- read.csv('./label_names_conversion.csv')
+
+adni.mem.1_5T.3Y <- dplyr::mutate(adni.mem.1_5T.3Y, 
+                                  sig.feature.all = a.ks.pvals <= 0.05 & a.cor.pvals <= 0.05,
+                                  sig.feature.aks = a.ks.pvals <= 0.05,
+                                  feature = sapply(str_split(adni.mem.1_5T.3Y$var.nms,'\\.'),function(x){paste(x[-(length(x))],collapse='.')}),
+                                  region = sapply(str_split(adni.mem.1_5T.3Y$var.nms,'\\.'),function(x){paste(x[(length(x))],collapse='.')}))
+adni.mem.1_5T.3Y <- merge(adni.mem.1_5T.3Y,label.name.conversion, by.x = 'region', by.y = 'Label')
+sig.table.all <- xtabs(sig.feature.all ~ feature + region,data = adni.mem.1_5T.3Y)
+colnames(sig.table.all) <- label.name.conversion[match(label.name.conversion$Label,colnames(sig.table.all)),1]
+
+unique.features <- unique(sapply(str_split(rownames(sig.table.all),'\\.'),function(x){x <- x[x!=""];l <- length(x);ifelse(l>1,paste(x[-(l)],collapse='.'),x)}))
+
+region.ranking <- colSums(sig.table.all[rownames(sig.table.all) %in% c('FreeSurfer.thickness..median','mean.curvature..median','Volume','travel.depth..median','FreeSurfer.convexity..sulc...median'),])
+region.ranking <- sort(region.ranking,decreasing = T)
+region.ranking <- region.ranking[region.ranking!=0]
+
+unique.regions.correlated <- unique(sapply(str_split(names(region.ranking),'-'),function(x){x[[length(x)]]}))
+
+sig.table.aks <- xtabs(sig.feature.aks ~ feature + Label.name, data = adni.mem.1_5T.3Y)
+region.ranking <- colSums(sig.table.aks[rownames(sig.table.aks) %in% c('FreeSurfer.thickness..median','mean.curvature..median','Volume','travel.depth..median','FreeSurfer.convexity..sulc...median'),])
+region.ranking <- sort(region.ranking,decreasing = T)
+region.ranking <- region.ranking[region.ranking!=0]
+unique.regions <- unique(sapply(str_split(names(region.ranking),'-'),function(x){x[[length(x)]]}))
+```
+2. Significantly changed regions are: `r unique.regions`
+3. Significantly changed regions that are also correlated with ADNI.MEM are: `r unique.regions.correlated`
+
+### Differential Expression Analysis
+Selected studies
+
+      |                *Study*                           |*Source* |*SynapseID* |
+      |:-------------------------------------------------|---------|-----------:|
+      | GSE36980.MA.TemporalCortex.AD-Control            |	GEO	   | syn4210618 |
+      | GSE5281.MA.EntorhinalCortex.AD-Control           |	GEO	   | syn4167496 |
+      | GSE5281.MA.MedialTemporal.AD-Control             |	GEO	   | syn4167496 |
+      | GSE5281.MA.SuperiorFrontal.AD-Control            |	GEO	   | syn4167496 |
+      | MSSM.RNASeq.SuperiorTemporal.AD-Control          |	AMP-AD | syn4211983 |
+  
+```{r extract.data, cache=T}
+# Extract all p-values
+File <- synQuery('select id,name from file where parentId == "syn3721177"')
+
+Files.logFC <- File[grep('logFC',File$file.name),]
+Files.logFC <- Files.logFC[grep('GSE36980 | GSE5281 | MSSM.RNASeq',Files.logFC$file.name),]
+
+Files.PVAL <- File[grep('adjPval',File$file.name),]
+Files.PVAL <- Files.PVAL[grep('GSE36980 | GSE5281 | MSSM.RNASeq',Files.PVAL$file.name),]
+
+ALL_USED_IDs = c(Files.logFC$file.id, Files.PVAL$file.id)
+
+# Download Pvalues
+PVAL <- lapply(Files.PVAL$file.id,function(id){val <- read.table(synGet(id)@filePath, sep='\t',header = T, stringsAsFactors = F);return(val)})
+PVAL <- join_all(PVAL,by = 'hgnc_symbol',match='all')
+PVAL <- PVAL[, colnames(PVAL) %in% c('hgnc_symbol',
+                                     'GSE36980.MA.TemporalCortex.AD.Control',
+                                     'GSE5281.MA.EntorhinalCortex.AD.Control',
+                                     'GSE5281.MA.MedialTemporal.AD.Control',
+                                     'GSE5281.MA.SuperiorFrontal.AD.Control',
+                                     'MSSM.RNASeq.SuperiorTemporal.AD.Control')]
+colnames(PVAL)[-(1)] <- paste(str_replace_all(colnames(PVAL)[-(1)],'[^[:alnum:]]','.'),'adjPval',sep='.')
+PVAL <- PVAL[!duplicated(PVAL$hgnc_symbol),]
+
+# Download Fold changes
+FC <- lapply(Files.logFC$file.id,function(id){val <- read.table(synGet(id)@filePath, sep='\t',header = T, stringsAsFactors = F);return(val)})
+FC <- join_all(FC,by = 'hgnc_symbol',match='all')
+FC <- FC[, colnames(FC) %in% c('hgnc_symbol',
+                               'GSE36980.MA.TemporalCortex.AD.Control',
+                               'GSE5281.MA.EntorhinalCortex.AD.Control',
+                               'GSE5281.MA.MedialTemporal.AD.Control',
+                               'GSE5281.MA.SuperiorFrontal.AD.Control',
+                               'MSSM.RNASeq.SuperiorTemporal.AD.Control')]
+colnames(FC)[-(1)] <- paste(str_replace_all(colnames(FC)[-(1)],'[^[:alnum:]]','.'),'logFC',sep='.')
+FC <- FC[!duplicated(FC$hgnc_symbol),]
+```
+
+```{r get.differential.expression, fig.width=10, fig.height=8}
+# Get number of significantly differentialy expressed genes with adj.P.Val <= 0.05
+tmp <- as.data.frame(colSums(PVAL[,-(1)]<=0.05, na.rm = T))
+colnames(tmp) <- 'Diff exp genes at FDR <= 0.05'
+kable(tmp)
+
+# Plot the distribution of all pvalues
+attach(mtcars)
+par(mfrow=c(2,3))
+for(cols in colnames(PVAL)[2:dim(PVAL)[2]])
+  hist(PVAL[,cols], main = cols, xlab= 'adj.P.Val')
+
+# plot fold change and pvalues
+par(mfrow=c(2,3))
+for(cols in colnames(PVAL)[2:dim(PVAL)[2]])
+  plot(FC[,gsub('adjPval','logFC',cols)],-log10(PVAL[,cols]), main = gsub('adjPval','',cols), xlab = 'logFC', ylab = '-log10(adj.Pval)')
+```
+## Ranking
+#### Individual gene ranking
+All five analysis from 3 studies and four different brain regions were combined using a tied ranking scheme. 
+1. -log10 of adjusted (BH corrected) Pvalues were ranked for each individual studies (i.e., higher -log10 pvalue gets higher rank)
+2. absolute log of fold change were ranked for each individual studies (i.e., higher absolute fold change gets higher rank)
+3. took the sum of pvalue and fold change ranking for all the five studies to get the importance of genes (i.e., higher the sum greater the importance of gene)
+4. if sum is NA then the gene is not present in at least one of the study
+
+Description of column names
+1. *.logFC - log Fold change values from individual studies
+2. *.adjPval - BH corrected pvalues from individual studies
+3. rankSum - sum of combined ranks from all five studies (note: higher the better)
+4. Num.studies.diff.exp - Number of studies in which a given gene is differentially expressed for adjPval <= 0.05
+
+```{r rank.genes, cache=TRUE}
+# Combine pvals and logFC
+COMBINE = merge(FC,PVAL, by = 'hgnc_symbol', all = T)
+
+# Rank pvals
+Rank.Pvals = PVAL
+Rank.Pvals[,-(1)] = -log10(Rank.Pvals[,-(1)])
+Rank.Pvals[,-(1)] = as.data.frame(lapply(Rank.Pvals[,-(1)], function(x){ rank(x, na.last = "keep", ties.method = "average")}))
+
+# Rank logFC
+Rank.logFC = FC
+Rank.logFC[,-(1)] = abs(Rank.logFC[,-(1)])
+Rank.logFC[,-(1)] = as.data.frame(lapply(Rank.logFC[,-(1)], function(x){ rank(x, na.last = "keep", ties.method = "average")}))
+
+# Combined rank 
+Ranks = merge(Rank.logFC,Rank.Pvals,by = 'hgnc_symbol')
+Ranks$rankSum = rowSums(Ranks[,-(1)])
+Ranks = Ranks[order(Ranks$rankSum, decreasing=T),]
+
+COMBINE = merge(COMBINE,Ranks[,c('hgnc_symbol','rankSum')], by = 'hgnc_symbol',all = T)
+COMBINE = COMBINE[order(COMBINE$rankSum, decreasing =T),]
+
+COMBINE$Num.studies.diff.exp = rowSums(COMBINE[,grep('adjPval',colnames(COMBINE))]<=0.05,)
+  
+# Write to synapse
+write.table(COMBINE, file = './DiffExpAnal_FC_Pval_Rank_Merged',sep='\t', quote=F, row.names=F)
+COMBINE_OBJ <- File('./DiffExpAnal_FC_Pval_Rank_Merged', name = "Differential Expression Analysis logFC adjPval Rank", parentId = parentId)
+COMBINE_OBJ <- synStore(COMBINE_OBJ, used = ALL_USED_IDs, activityName = activityName, executed = thisFile, activityDescription = activityDescription)
+```
