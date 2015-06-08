@@ -1,0 +1,99 @@
+---
+title: "Hub Analysis of DLPFC data from CMC"
+author: "Thanneer Perumal"
+date: "`r date()`"
+output: html_document
+---
+```{r libs, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+## It is assumed your working directory is where this file is
+
+# Clear R console screen output
+cat("\014")  
+
+# Load required libraries
+library('synapseClient')
+library('ggplot2')
+library('data.table')
+library('knitr')
+library('dplyr')
+
+## Needs the dev branch
+library(rGithubClient)
+
+## Requires ggdendro
+devtools::source_url("https://raw.githubusercontent.com/chr1swallace/random-functions/master/R/ggplot-heatmap.R")
+
+# source('/mnt/Github/knit2synapse-1/R/knitFile2Synapse.R')
+# knitFile2Synapse(file = "./SCZ_HubAnalysis.Rmd", name = 'SCZ Hub Analysis', parentId = 'syn4261095', overwrite=F)
+
+synapseLogin()
+
+# source utility files from ../R/lib folder
+file.sources = list.files('../R/lib',pattern="*.R")
+file.sources = sapply(file.sources,function(x){return(paste('../R/lib',x,sep='/'))})
+tmp = sapply(file.sources,source,.GlobalEnv)
+
+options(xtable.type="html")
+
+knitr::opts_chunk$set(
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  error = FALSE,
+  tidy = FALSE,
+  cache = TRUE)
+```
+### Download data
+```{r setup, include=FALSE}
+## Input IDs
+CNTRL_ID <- 'syn3348750'
+SCZ_ID <- 'syn3348769'
+
+## Parent IDs
+SYNAPSE_STORE = T
+parentId = 'syn4261095'
+
+## Get data from synapse
+CNTRL_OBJ <- synGet(CNTRL_ID)
+ALL.USED.IDs = CNTRL_OBJ
+CNTRL <- fread(CNTRL_OBJ@filePath, data.table=F)
+
+SCZ_OBJ <- synGet(SCZ_ID)
+ALL.USED.IDs <- c(ALL.USED.IDs, SCZ_OBJ)
+SCZ <- fread(SCZ_OBJ@filePath, data.table=F)
+```
+### Hub Analysis
+```{r hub.analysis, fig.height=8, fig.width=8}
+tmp1 <- rbind(data.frame(cond = 'CNTRL', k = CNTRL$k.all.normed),data.frame(cond = 'SCZ', k = SCZ$k.all.normed),
+              data.frame(cond='DIFF',k = abs(CNTRL$k.all.normed-SCZ$k.all.normed)))
+ggplot(tmp1, aes(x=k, colour=cond)) + geom_density() + ggtitle('Total Connectivity')
+
+tmp <- merge(CNTRL,SCZ,by = 'Gene', all=T)
+colnames(tmp) <- gsub('.x','.control',colnames(tmp))
+colnames(tmp) <- gsub('.y','.scz',colnames(tmp))
+
+RESULTS <- dplyr::select(tmp, Gene, MAPPED_Gene.control, 
+                         Module.control, k.all.control,
+                         Module.scz, k.all.scz)
+
+RESULTS <- dplyr::mutate(RESULTS, k.diff = k.all.scz - k.all.control)
+RESULTS <- dplyr::arrange(RESULTS, desc(abs(k.diff)))
+```
+### Store files in synapse
+```{r synapsestore, echo=FALSE, include=FALSE, eval=TRUE}
+ActivityName <- 'Hubness analysis from CMC DLPFC'
+  
+thisFileName <- 'SCZ_HubAnalysis.Rmd'
+  
+# Github link
+thisRepo <- getRepo(repository = "th1vairam/Takeda_contract", 
+                    ref="branch", 
+                    refName='master')
+
+thisFile <- getPermlink(repository = thisRepo,
+                        repositoryPath=paste0('code/Rmd/', thisFileName))
+
+# Code
+CODE <- File('./SCZ_HubAnalysis.Rmd',name = 'SCZ Hub Analysis',parentId = parentId)
+CODE <- synStore(CODE, used = ALL_USED_IDs, activityName = ActivityName, executed = thisFile)
+```
